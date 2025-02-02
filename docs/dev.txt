@@ -1,52 +1,44 @@
-# Alchemist Development Notes
+# babelgraph Development Notes
 
-This document serves as a living overview for the Alchemist project: an AI agent orchestration library used internally by Agency42. It provides details on the overall system architecture, our project structure, current development status, and future roadmap.
+This document serves as a living overview for the babelgraph project: a lightweight graph orchestration library for multi-agent systems. It provides details on the overall system architecture, project structure, current development status, and future roadmap.
 
 ---
 
 ## 1. Project Structure
 
-Below is the current layout of the Alchemist repository. It reflects how we organize core AI logic (agents, tools, graph), integration layers (extensions, logging), tests, and example projects.
+Below is the current layout of the babelgraph repository. It reflects how we organize core agent logic, graph orchestration, and examples.
 
 babelgraph/  
 ├── src/                      # Main package  
 │   ├── core/  
-│   │   ├── agent/                   # [CORE]  
-│   │   │   ├── base.py           # Provider-agnostic BaseAgent [DONE]  
-│   │   │   ├── config.py          # Agent configuration [DONE]  
-│   │   │   ├── logging.py         # Centralized logging system [DONE]  
-│   │   │   └── runtime.py         # Environment management [DONE]  
-│   │   ├── graph/                  # [CORE - IN PROGRESS ~90%]  
-│   │   │   ├── base.py            # Core graph framework [DONE]  
-│   │   │   ├── state.py           # State management [DONE]  
-│   │   │   ├── config.py          # Graph configuration [DONE]  
-│   │   │   ├── runtime.py         # Graph runtime environment [IN PROGRESS]  
-│   │   │   ├── viz.py             # Graph visualization [NEW]
+│   │   ├── agent/           # [CORE]  
+│   │   │   ├── base.py      # Provider-agnostic BaseAgent [DONE]  
+│   │   │   ├── config.py    # Agent configuration [DONE]  
+│   │   │   └── runtime.py   # Environment management [DONE]  
+│   │   ├── graph/           # [CORE - IN PROGRESS ~90%]  
+│   │   │   ├── base.py      # Core graph framework [DONE]  
+│   │   │   ├── state.py     # State management [DONE]  
+│   │   │   ├── config.py    # Graph configuration [DONE]  
+│   │   │   ├── runtime.py   # Graph runtime environment [IN PROGRESS]  
 │   │   │   └── nodes/  
-│   │   │       ├── base/          # Base node implementations  
-│   │   │       │   ├── node.py    # Abstract base node [DONE]  
-│   │   │       ├── actions.py     # Enhanced action node [DONE]  
-│   │   │       ├── agent.py       # Agent node implementation [DONE]  
-│   │   └── tools/                 # [CORE]  
-│   │       ├── calculator.py      # Basic arithmetic tool [TESTED]  
-│   │       ├── discord_toolkit.py # Discord integration tool [COMPLETE]  
-│   │       └── image_generator.py          # Image generation tool [TESTED]  
-└── examples/                      # Example implementations  
-    ├── base/                     # Basic agent examples  
-    │   ├── 01_custom_tool_agent.py     # Custom tool integration  
-    │   ├── 02_local_runtime_agent.py   # Local runtime usage  
-    │   ├── 03_agent_steps_and_history.py # History management  
-    │   ├── 04_custom_runtime_agent.py  # Custom runtime creation  
-    │   └── 05_structured_agent.py      # Structured outputs  
-    ├── discord/                   # Discord bot examples  
-    │   ├── chatbot.py  
-    │   ├── local_reader_agent.py  
-    │   └── run_bot.py  
-    └── graph/                     # Graph workflow examples  
-        ├── analysis_workflow.py   # Basic analysis pipeline  
-        ├── discord_workflow.py    # Platform integration  
-        ├── reflection_workflow.py # Multi-step reasoning  
-        └── tutor_workflow.py     # Complex multi-agent system  
+│   │   │       ├── base.py  # Abstract base node [DONE]  
+│   │   │       ├── actions.py # Enhanced action node [DONE]  
+│   │   │       └── agent.py # Agent node implementation [DONE]  
+│   │   └── tools/           # [CORE]  
+│   │       ├── base.py      # Base tool interface [DONE]  
+│   │       └── calculator.py # Example tool implementation [TESTED]  
+│   └── tests/               # Test suite  
+│       ├── core/  
+│       │   ├── agent/       # Agent tests  
+│       │   ├── graph/       # Graph system tests  
+│       │   └── tools/       # Tool tests  
+└── examples/                # Example implementations  
+    ├── basic/              # Basic usage examples  
+    │   ├── 01_simple_agent.py  
+    │   └── 02_graph_basics.py  
+    └── advanced/           # Advanced patterns  
+        ├── multi_agent_workflow.py  
+        └── parallel_execution.py  
 
 ---
 
