@@ -1,0 +1,368 @@
+# Alchemist Development Notes
+
+This document serves as a living overview for the Alchemist project: an AI agent orchestration library used internally by Agency42. It provides details on the overall system architecture, our project structure, current development status, and future roadmap.
+
+---
+
+## 1. Project Structure
+
+Below is the current layout of the Alchemist repository. It reflects how we organize core AI logic (agents, tools, graph), integration layers (extensions, logging), tests, and example projects.
+
+babelgraph/  
+├── src/                      # Main package  
+│   ├── core/  
+│   │   ├── agent/                   # [CORE]  
+│   │   │   ├── base.py           # Provider-agnostic BaseAgent [DONE]  
+│   │   │   ├── config.py          # Agent configuration [DONE]  
+│   │   │   ├── logging.py         # Centralized logging system [DONE]  
+│   │   │   └── runtime.py         # Environment management [DONE]  
+│   │   ├── graph/                  # [CORE - IN PROGRESS ~90%]  
+│   │   │   ├── base.py            # Core graph framework [DONE]  
+│   │   │   ├── state.py           # State management [DONE]  
+│   │   │   ├── config.py          # Graph configuration [DONE]  
+│   │   │   ├── runtime.py         # Graph runtime environment [IN PROGRESS]  
+│   │   │   ├── viz.py             # Graph visualization [NEW]
+│   │   │   └── nodes/  
+│   │   │       ├── base/          # Base node implementations  
+│   │   │       │   ├── node.py    # Abstract base node [DONE]  
+│   │   │       ├── actions.py     # Enhanced action node [DONE]  
+│   │   │       ├── agent.py       # Agent node implementation [DONE]  
+│   │   └── tools/                 # [CORE]  
+│   │       ├── calculator.py      # Basic arithmetic tool [TESTED]  
+│   │       ├── discord_toolkit.py # Discord integration tool [COMPLETE]  
+│   │       └── image_generator.py          # Image generation tool [TESTED]  
+└── examples/                      # Example implementations  
+    ├── base/                     # Basic agent examples  
+    │   ├── 01_custom_tool_agent.py     # Custom tool integration  
+    │   ├── 02_local_runtime_agent.py   # Local runtime usage  
+    │   ├── 03_agent_steps_and_history.py # History management  
+    │   ├── 04_custom_runtime_agent.py  # Custom runtime creation  
+    │   └── 05_structured_agent.py      # Structured outputs  
+    ├── discord/                   # Discord bot examples  
+    │   ├── chatbot.py  
+    │   ├── local_reader_agent.py  
+    │   └── run_bot.py  
+    └── graph/                     # Graph workflow examples  
+        ├── analysis_workflow.py   # Basic analysis pipeline  
+        ├── discord_workflow.py    # Platform integration  
+        ├── reflection_workflow.py # Multi-step reasoning  
+        └── tutor_workflow.py     # Complex multi-agent system  
+
+---
+
+## 2. Core Architecture Updates
+
+1. **Agent System (COMPLETE)**
+   - Provider-agnostic BaseAgent with Mirascope integration
+   - Structured output support via response_model
+   - Enhanced tool execution with both sync/async support
+   - Streaming support for real-time responses
+   - Direct message processing via _step()
+   - System prompt configuration with Pydantic models
+
+2. **Runtime Framework (SIMPLIFIED)**
+   - Focused on platform-specific behaviors
+   - BaseRuntime: Core functionality for environment management
+   - BaseChatRuntime: Interactive chat capabilities
+   - Platform Runtimes: Environment-specific integrations (e.g., Discord)
+   - Runtime injection only when platform-specific behavior needed
+   - No need for workflow-specific runtimes
+
+3. **Graph System (REFACTORED)**
+   - Pure orchestration layer for workflow management
+   - Handles node connections and transitions
+   - Manages state sharing between nodes
+   - Supports parallel execution and subgraphs
+   - AgentNodes use direct agent._step() calls
+   - Runtime injection available but optional
+
+Key Design Decisions:
+1. **Separation of Concerns**
+   - Agents handle LLM interactions and structured outputs
+   - Graphs manage workflow orchestration and state
+   - Runtimes provide platform integration when needed
+
+2. **Simplified Processing**
+   - AgentNodes call agent._step() directly
+   - No need for workflow-specific runtimes
+   - Graph handles state management and transitions
+   - Parallel execution through graph orchestration
+
+3. **Runtime Usage**
+   - Only inject runtimes for platform-specific needs
+   - BaseRuntime for environment management
+   - Platform runtimes (e.g., Discord) for specific integrations
+   - Most workflows can use direct agent execution
+
+4. **State Management**
+   - NodeState for passing data between nodes
+   - Graph manages parallel execution state
+   - Clean state sharing in subgraphs
+   - No need for complex runtime state
+
+Example Patterns:
+1. **Basic Agent Usage**
+   ```python
+   # Direct agent execution
+   response = await agent._step(message)
+   ```
+
+2. **Graph Orchestration**
+   ```python
+   # Create and connect nodes
+   graph.add_node(agent_node)
+   graph.add_edge("node1", "success", "node2")
+   
+   # Run workflow
+   state = await graph.run("entry_point")
+   ```
+
+3. **Platform Integration**
+   ```python
+   # Only inject runtime for platform needs
+   discord_node = AgentNode(
+       agent=agent,
+       runtime=DiscordRuntime(config)
+   )
+   ```
+
+4. **Tools System (COMPLETE)**
+   - Calculator tool for basic arithmetic
+   - Discord toolkit for platform integration
+   - Image generation capabilities
+   - Async-first implementation
+   - Result validation and error handling
+
+---
+
+## 3. System Architecture Overview
+
+Alchemist is built around three major subsystems:
+
+1. **Agent System** (in alchemist/ai/base/agent.py):  
+   - Provider-agnostic using Mirascope for LLM abstraction
+   - Supports OpenPipe integration for custom models
+   - Structured output via Pydantic models
+   - Tool integration with async support
+   - Streaming responses for real-time interaction
+   - System prompt configuration
+   - Conversation history management
+   - Can operate with different runtimes based on needs
+
+2. **Runtime System** (in alchemist/ai/base/runtime.py):
+   - Flexible runtime environments for different interaction patterns
+   - Base classes for custom runtime implementation
+   - Platform-specific adaptations (e.g., Discord, Local)
+   - Key components:
+     * BaseRuntime: Core functionality
+     * BaseChatRuntime: Interactive chat capabilities
+     * Platform Runtimes: Environment-specific behaviors
+   - Features:
+     * Session management
+     * Streaming support
+     * Tool integration
+     * Environment-specific configurations
+
+3. **Graph System** (in alchemist/ai/graph/):
+   - Pure orchestration layer for workflow management
+   - Nodes can use different runtimes as needed
+   - State management and persistence
+   - Event emission for monitoring
+   - Parallel execution support
+   - Subgraph composition
+   - Built-in support for:
+     * Input validation via Pydantic
+     * Detailed logging of execution
+     * State preservation
+     * Callback hooks
+
+Information Flow:
+1. Graph defines workflow structure and transitions
+2. Each node (especially AgentNodes) can be configured with appropriate runtime
+3. During execution:
+   - Graph handles orchestration and state management
+   - Nodes execute using their configured runtime (if any)
+   - Results stored in NodeState
+   - Events emitted for monitoring
+4. Platform-specific nodes (e.g., Discord interactions) use their specialized runtime
+5. Analysis or local processing nodes use base runtime or no runtime
+
+Example Multi-Runtime Workflow:
+```python
+# Discord interaction node using DiscordRuntime
+discord_node = AgentNode(
+    id="discord_interaction",
+    agent=agent,
+    runtime=DiscordRuntime(config=discord_config)
+)
+
+# Analysis node using local runtime
+analysis_node = AgentNode(
+    id="analysis",
+    agent=analysis_agent,
+    runtime=LocalRuntime()
+)
+
+# Pure processing node (no runtime needed)
+processing_node = ActionNode(
+    id="process",
+    action=process_data
+)
+
+# Graph combines nodes with different runtime behaviors
+graph = Graph()
+graph.add_node(discord_node)
+graph.add_node(analysis_node)
+graph.add_node(processing_node)
+```
+
+---
+
+## 4. Core Features & Capabilities
+
+1. **Provider-Agnostic LLM Integration**  
+   - Mirascope abstraction layer
+   - OpenPipe support for custom models
+   - Structured output validation
+   - Streaming response support
+
+2. **Runtime Environments**
+   - Local console interactions
+   - Graph-based workflows
+   - Platform integrations (Discord)
+   - Custom runtime support
+   - Features supported across all runtimes:
+     * Streaming responses
+     * Tool execution
+     * Structured outputs
+     * System prompt configuration
+     * State management
+
+3. **Graph Orchestration**  
+   - Node-based workflow composition
+   - State management
+   - Parallel execution
+   - Event emission
+   - Visualization
+   - Subgraph support
+   - Complex workflows:
+     * Multi-agent interactions
+     * Step-by-step reasoning
+     * Tool integration
+     * State persistence
+
+4. **Development Features**
+   - Comprehensive logging
+   - State persistence
+   - Event monitoring
+   - Visualization tools
+   - Example implementations
+
+---
+
+## 5. Example Implementations
+
+1. **Base Agent Examples**
+   - `01_custom_tool_agent.py`: Custom tool creation and integration
+   - `02_local_runtime_agent.py`: Local console runtime usage
+   - `03_agent_steps_and_history.py`: Conversation management
+   - `04_custom_runtime_agent.py`: Custom runtime implementation
+   - `05_structured_agent.py`: Structured output with Pydantic
+
+2. **Graph Workflow Examples**
+   - `reflection_workflow.py`: Multi-step reasoning demonstration
+     * Chain-of-thought implementation
+     * State management between steps
+     * Streaming responses
+     * Event callbacks
+   
+   - `tutor_workflow.py`: Complex multi-agent system
+     * Multiple agent personas
+     * Structured outputs
+     * Tool integration
+     * State management
+     * Custom node implementations
+     * Real-time interactions
+
+3. **Platform Integration**
+   - Discord chatbots
+   - Local message processing
+   - Platform-specific tools
+
+---
+
+## 6. Current Development Focus
+
+1. **Graph Runtime Integration**
+   - Seamless support for all BaseAgent features
+   - Improved multi-agent orchestration
+   - Enhanced state management
+   - Tool execution in graph context
+   - Streaming support across nodes
+
+2. **Documentation & Examples**
+   - Comprehensive docstrings
+   - Usage guides
+   - Example expansion
+   - Deployment documentation
+
+3. **Testing & Validation**
+   - Feature parity testing
+   - Integration tests
+   - Performance benchmarks
+   - Error handling validation
+
+4. **New Features**
+   - Memory system integration
+   - Additional platform integrations
+   - Enhanced tool capabilities
+   - Advanced visualization features
+
+---
+
+## 7. Development Guidelines
+
+1. **Code Style**
+   - Follow PEP 8 guidelines
+   - Use type hints consistently
+   - Implement comprehensive docstrings
+   - Maintain clear error messages
+
+2. **Architecture Principles**
+   - Provider-agnostic design
+   - Async-first implementation
+   - Modular components
+   - Clear separation of concerns
+   - Runtime flexibility
+   - Feature parity across systems
+
+3. **Testing Requirements**
+   - Unit tests for all components
+   - Integration tests for workflows
+   - Performance benchmarks
+   - Error scenario validation
+   - Runtime compatibility testing
+
+4. **Documentation Standards**
+   - Clear docstrings
+   - Usage examples
+   - Type hints
+   - Architecture diagrams
+   - Runtime-specific guides
+
+---
+
+## 8. Conclusion
+
+Alchemist has evolved into a robust framework for AI agent orchestration, with key features:
+
+1. Provider-agnostic agent system
+2. Flexible runtime environments
+3. Powerful graph-based workflows
+4. Comprehensive tool integration
+5. Platform integration support
+6. Development tools and utilities
+
+The focus remains on maintainability, extensibility, and production readiness while providing a flexible framework for AI agent development.
+
+For detailed implementation guides and API documentation, refer to the docstrings and example implementations in the repository.

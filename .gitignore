@@ -1,0 +1,86 @@
+__pycache__/
+venv/
+.env
+.arxiv/
+.ruff_cache/
+.venv/
+.lilypad/
+cooldowns.db
+memory.db
+.cursorrules
+agent.txt
+worldsim.txt
+.DS_Store
+*.log
+logs/*.json
+logs/
+core/arxiv/
+.pytest_cache/
+ai.egg-info/
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.*
+
+# User-specific bot implementations
+user_bots/
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Documentation
+docs/_build/ 
+
+.cursorrules
+
+# generated files
+config/channels.json
+channels.json
+
+# examples
+examples/templates/
+ezamples/generations/
