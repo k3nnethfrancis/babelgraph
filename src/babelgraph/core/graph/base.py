@@ -36,13 +36,14 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from babelgraph.core.logging import (
-    AlchemistLoggingConfig,
+    LogComponent,
+    BabelLoggingConfig,
     log_verbose,
     VerbosityLevel,
-    LogComponent
+    get_logger
 )
-from babelgraph.core.state import NodeState, NodeStatus
-from babelgraph.core.nodes.base.node import Node
+from babelgraph.core.graph.state import NodeState, NodeStatus
+from babelgraph.core.graph.nodes.base.node import Node
 
 # Get logger for graph component
 logger = logging.getLogger(LogComponent.GRAPH.value)
@@ -63,12 +64,16 @@ class Graph(BaseModel):
     """
     nodes: Dict[str, Node] = Field(default_factory=dict)
     entry_points: Dict[str, str] = Field(default_factory=dict) 
-    logging_config: AlchemistLoggingConfig = Field(
-        default_factory=AlchemistLoggingConfig
+    logging_config: BabelLoggingConfig = Field(
+        default_factory=BabelLoggingConfig
     )
 
     class Config:
         arbitrary_types_allowed = True
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.logger = get_logger(LogComponent.GRAPH)
 
     def add_node(self, node: Node) -> None:
         """Register a node with the graph.

@@ -18,7 +18,7 @@ Typical Use-Cases:
 
 Example:
 --------
->>> from alchemist.ai.tools.calculator import CalculatorTool
+>>> from babelgraph.core.tools.calculator import CalculatorTool
 >>>
 >>> node = ActionNode(
 ...     id="calc_step",
@@ -39,10 +39,10 @@ from typing import Dict, Any, Optional, List, Callable
 from pydantic import Field, model_validator
 from datetime import datetime
 
-from alchemist.ai.base.logging import get_logger, LogComponent
-from alchemist.ai.graph.nodes.base.node import Node
-from alchemist.ai.graph.state import NodeState, NodeStatus
-from alchemist.ai.base.logging import Colors
+from babelgraph.core.logging import get_logger, LogComponent
+from babelgraph.core.graph.nodes.base.node import Node
+from babelgraph.core.graph.state import NodeState, NodeStatus
+from babelgraph.core.logging import Colors
 
 logger = get_logger(LogComponent.NODES)
 
@@ -208,7 +208,7 @@ async def test_action_node():
     )
 
     # Create test state
-    from alchemist.ai.graph.state import NodeState
+    from babelgraph.core.graph.state import NodeState
     state = NodeState()
     # Suppose the user put 'calc_args' in results
     state.results["calc_args"] = {"x": 2, "y": 3}

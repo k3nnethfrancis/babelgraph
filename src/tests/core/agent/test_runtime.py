@@ -11,10 +11,9 @@ import pytest
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
-from alchemist.ai.base.runtime import BaseRuntime
-from alchemist.ai.base.agent import BaseAgent
-from alchemist.ai.prompts.base import PersonaConfig
-from alchemist.ai.base.logging import AlchemistLoggingConfig, VerbosityLevel
+from babelgraph.core.runtime import BaseRuntime
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.logging import BabelLoggingConfig, VerbosityLevel
 
 
 class TestRuntime(BaseRuntime):

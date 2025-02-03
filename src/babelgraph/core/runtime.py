@@ -1,6 +1,6 @@
-"""Base Runtime Module for Agent Execution Environments"""
+"""Runtime environments for babelgraph agents."""
 
-from typing import Dict, Any, Optional, Union, Callable, AsyncGenerator
+from typing import Optional, Dict, Any, Union, Callable, AsyncGenerator
 from abc import ABC, abstractmethod
 from datetime import datetime
 from uuid import uuid4
@@ -10,7 +10,7 @@ import re
 import asyncio
 
 from babelgraph.core.logging import LogComponent
-from babelgraph.core.agent import BaseAgent
+from babelgraph.core.agent.base import BaseAgent
 
 # Get logger for runtime component
 logger = logging.getLogger(LogComponent.RUNTIME.value)

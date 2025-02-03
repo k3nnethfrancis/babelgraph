@@ -11,8 +11,8 @@ import pytest
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
-from alchemist.ai.graph.nodes import ActionNode
-from alchemist.ai.graph.state import NodeState
+from babelgraph.core.graph.nodes import ActionNode
+from babelgraph.core.graph.state import NodeState
 
 
 class MockTool:

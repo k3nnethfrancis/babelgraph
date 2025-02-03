@@ -8,9 +8,9 @@ This package provides a lightweight framework for composing AI workflows using:
 - Parallel execution support
 """
 
-from alchemist.ai.graph.base import Graph
-from alchemist.ai.graph.state import NodeState, NodeStatus
-from alchemist.ai.graph.nodes import (
+from babelgraph.core.graph.base import Graph
+from babelgraph.core.graph.state import NodeState, NodeStatus
+from babelgraph.core.graph.nodes import (
     Node,
     ActionNode,
     AgentNode,

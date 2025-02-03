@@ -16,11 +16,11 @@ from typing import Optional, Dict, Any, Union, AsyncGenerator
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 
-from alchemist.ai.base.agent import BaseAgent
-from alchemist.ai.base.runtime import BaseRuntime
-from alchemist.ai.base.logging import get_logger, LogComponent, Colors
-from alchemist.ai.graph.nodes.base.node import Node
-from alchemist.ai.graph.state import NodeState, NodeStatus
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.runtime import BaseRuntime
+from babelgraph.core.logging import get_logger, LogComponent, Colors
+from babelgraph.core.graph.nodes.base.node import Node
+from babelgraph.core.graph.state import NodeState, NodeStatus
 
 logger = get_logger(LogComponent.NODES)
 
@@ -149,9 +149,9 @@ class AgentNode(Node):
 
 async def test_agent_node():
     """Test the AgentNode with streaming and structured output."""
-    from alchemist.ai.base.agent import BaseAgent
-    from alchemist.ai.base.runtime import BaseRuntime
-    from alchemist.ai.graph.state import NodeState
+    from babelgraph.core.agent.base import BaseAgent
+    from babelgraph.core.runtime import BaseRuntime
+    from babelgraph.core.graph.state import NodeState
     from pydantic import BaseModel
     
     # Define a test response model

@@ -14,9 +14,8 @@ from pydantic import BaseModel
 from mirascope.core import BaseMessageParam, Messages
 from mirascope.core.base import TextPart
 from mirascope.core import prompt_template
-from alchemist.ai.graph.nodes import AgentNode
-from alchemist.ai.graph.state import NodeState
-from alchemist.ai.prompts.base import PersonaConfig
+from babelgraph.core.graph.nodes import AgentNode
+from babelgraph.core.graph.state import NodeState
 from mirascope.core.base.messages import Messages
 from mirascope.core.base.prompt import prompt_template
 from mirascope.core.base.dynamic_config import BaseDynamicConfig

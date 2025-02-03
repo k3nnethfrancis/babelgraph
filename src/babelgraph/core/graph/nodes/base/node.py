@@ -14,11 +14,11 @@ Typical Usage:
 import abc
 from typing import Tuple, Dict, Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING
 from pydantic import BaseModel, Field, model_validator
-from alchemist.ai.base.logging import get_logger, LogComponent
-from alchemist.ai.graph.state import NodeStateProtocol
+from babelgraph.core.logging import get_logger, LogComponent
+from babelgraph.core.graph.state import NodeStateProtocol
 
 if TYPE_CHECKING:
-    from alchemist.ai.graph.state import NodeState
+    from babelgraph.core.graph.state import NodeState
 
 # Get logger for node operations
 logger = get_logger(LogComponent.NODES)

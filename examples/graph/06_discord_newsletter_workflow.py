@@ -22,7 +22,6 @@ from babelgraph.core.agent import BaseAgent
 from babelgraph.core.prompts.persona import KEN_E
 from babelgraph.tools import DiscordTools
 from babelgraph.core.runtime import RuntimeConfig
-from babelgraph.core.prompts.base import PersonaConfig
 from babelgraph.core.state import NodeState as NewNodeState
 
 # Set up logging
@@ -892,12 +891,8 @@ async def main(additional_context: str = ""):
         )
         
         # Enable debug logging for workflow
-        logging.getLogger("alchemist.ai.graph.base").setLevel(logging.DEBUG)
-        
-        # Reduce noise from other modules
-        logging.getLogger("discord").setLevel(logging.WARNING)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
-        logging.getLogger("alchemist.ai.tools.discord_tool").setLevel(logging.WARNING)
+        logging.getLogger("babelgraph.core.graph.base").setLevel(logging.DEBUG)
+        logging.getLogger("babelgraph.core.tools.discord_tool").setLevel(logging.WARNING)
         
         logger.info("🚀 Starting newsletter workflow...")
         

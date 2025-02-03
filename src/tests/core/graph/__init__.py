@@ -1,4 +1,4 @@
-"""Test suite for the Alchemist Graph System.
+"""Test suite for the Babelgraph Graph System.
 
 This package contains comprehensive tests for the graph-based workflow system,
 organized into the following structure:

@@ -11,7 +11,7 @@ import pytest
 from typing import Dict, Any
 import os
 
-from alchemist.ai.graph.config import GraphConfig
+from babelgraph.core.graph.config import GraphConfig
 
 
 @pytest.fixture

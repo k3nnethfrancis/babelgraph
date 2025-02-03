@@ -12,8 +12,8 @@ from typing import Dict, Any, Optional
 import asyncio
 from pydantic import Field
 
-from alchemist.ai.graph.nodes.base import Node
-from alchemist.ai.graph.state import NodeState
+from babelgraph.core.graph.nodes.base import Node
+from babelgraph.core.graph.state import NodeState
 
 
 class SimpleNode(Node):

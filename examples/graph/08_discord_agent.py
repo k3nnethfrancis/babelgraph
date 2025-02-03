@@ -25,23 +25,15 @@ from babelgraph.core.logging import (
     LogLevel,
     LogComponent,
     Colors,
-    AlchemistLoggingConfig,
     VerbosityLevel,
     get_logger
 )
-from alchemist.ai.graph import (
+from babelgraph.core.graph import (
     Graph,
-    NodeState,
-    AgentNode,
-    TerminalNode
+    Node,
+    AgentNode
 )
-
-# Optional Discord integration
-try:
-    from alchemist.extensions.discord.runtime import DiscordRuntime, DiscordRuntimeConfig
-    DISCORD_AVAILABLE = True
-except ImportError:
-    DISCORD_AVAILABLE = False
+from babelgraph.extensions.discord.runtime import DiscordRuntime, DiscordRuntimeConfig
 
 ###################################################################
 # Response Models

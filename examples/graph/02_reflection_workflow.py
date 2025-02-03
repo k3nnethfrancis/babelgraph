@@ -20,14 +20,11 @@ from babelgraph.core.graph import (
     AgentNode,
     TerminalNode
 )
-from alchemist.ai.base.logging import (
-    configure_logging, 
-    LogLevel, 
-    LogComponent, 
-    get_logger,
-    Colors,
-    VerbosityLevel,
-    AlchemistLoggingConfig
+from babelgraph.core.logging import (
+    LogComponent,
+    BabelLoggingConfig,
+    configure_logging,
+    LogLevel
 )
 
 ###################################################################

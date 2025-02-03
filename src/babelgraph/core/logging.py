@@ -1,4 +1,4 @@
-"""Logging Configuration with pretty formatting for Alchemist."""
+"""Logging Configuration with pretty formatting for Babelgraph."""
 
 import logging
 from typing import Optional, Dict, Any
@@ -84,23 +84,19 @@ class LogFormat(str, Enum):
     SIMPLE = PRETTY_FORMAT
 
 class LogComponent(str, Enum):
-    """Components that can be logged.
-    
-    Each component represents a major subsystem in the Alchemist framework.
-    The value is the logger name used in the logging hierarchy.
-    """
-    AGENT = "alchemist.ai.base.agent"          # Base agent functionality
-    RUNTIME = "alchemist.ai.base.runtime"       # Runtime environment
-    GRAPH = "alchemist.ai.graph.base"          # Graph system core
-    NODES = "alchemist.ai.graph.nodes"         # Graph nodes
-    TOOLS = "alchemist.ai.tools"               # Tool implementations
-    PROMPTS = "alchemist.ai.prompts"           # Prompt management
-    DISCORD = "alchemist.core.extensions.discord"  # Discord integration
-    WORKFLOW = "alchemist.ai.graph.workflow"    # Workflow execution
-    SESSION = "alchemist.core.session"          # Session management
-    MEMORY = "alchemist.core.memory"           # Memory systems
+    """Components that can be logged."""
+    AGENT = "babelgraph.core.agent"
+    RUNTIME = "babelgraph.core.runtime"
+    GRAPH = "babelgraph.core.graph"
+    NODES = "babelgraph.core.graph.nodes"
+    TOOLS = "babelgraph.core.tools"
+    PROMPTS = "babelgraph.core.prompts"
+    DISCORD = "babelgraph.extensions.discord"
+    WORKFLOW = "babelgraph.core.graph.workflow"
+    SESSION = "babelgraph.core.session"
+    MEMORY = "babelgraph.core.memory"
 
-class LogLevel(int, Enum):
+class LogLevel(IntEnum):
     """Log levels mapped to logging module levels."""
     DEBUG = logging.DEBUG
     INFO = logging.INFO
@@ -109,15 +105,9 @@ class LogLevel(int, Enum):
     CRITICAL = logging.CRITICAL
 
 class VerbosityLevel(IntEnum):
-    """
-    Custom verbosity levels for more granular control.
-    Matches or extends standard Python logging levels:
-        - 10 => DEBUG
-        - 15 => VERBOSE (optional custom level)
-        - 20 => INFO
-    """
+    """Custom verbosity levels for more granular control."""
     DEBUG = logging.DEBUG
-    VERBOSE = 15  # Custom lower-than-INFO level if desired
+    VERBOSE = 15  # Custom lower-than-INFO level
     INFO = logging.INFO
     WARNING = logging.WARNING
     ERROR = logging.ERROR
@@ -125,31 +115,12 @@ class VerbosityLevel(IntEnum):
 
 logging.addLevelName(VerbosityLevel.VERBOSE, "VERBOSE")
 
-class AlchemistLoggingConfig(BaseModel):
-    """
-    Pydantic model for configuring logging verbosity.
-
-    Attributes:
-        level: The main log level (DEBUG, VERBOSE, INFO, etc.).
-        show_llm_messages: Whether to display full LLM messages in logs.
-        show_tool_calls: Whether to display tool call details.
-        show_node_transitions: Whether to display graph node transitions in logs.
-    """
+class BabelLoggingConfig(BaseModel):
+    """Configuration for logging behavior."""
     level: VerbosityLevel = Field(default=VerbosityLevel.INFO)
     show_llm_messages: bool = Field(default=False)
     show_tool_calls: bool = Field(default=False)
     show_node_transitions: bool = Field(default=False)
-
-def log_verbose(logger: logging.Logger, message: str) -> None:
-    """
-    Custom helper to log messages at our VERBOSE level.
-    
-    Args:
-        logger: The logger to use.
-        message: The message to log.
-    """
-    if logger.isEnabledFor(VerbosityLevel.VERBOSE):
-        logger.log(VerbosityLevel.VERBOSE, message)
 
 def configure_logging(
     default_level: LogLevel = LogLevel.INFO,
@@ -157,14 +128,7 @@ def configure_logging(
     pretty: bool = True,
     log_file: Optional[str] = None
 ) -> None:
-    """Configure logging with pretty formatting.
-    
-    Args:
-        default_level: Default logging level
-        component_levels: Optional component-specific levels
-        pretty: Whether to use pretty formatting (default: True)
-        log_file: Optional file path for logging
-    """
+    """Configure logging with pretty formatting."""
     # Set up handlers
     handlers = []
     
@@ -203,7 +167,6 @@ class JsonLogHandler(logging.Handler):
     """Handler that formats log records as JSON."""
     
     def emit(self, record: logging.LogRecord) -> None:
-        """Emit a log record as JSON."""
         try:
             msg = self.format(record)
             log_entry = {
@@ -216,7 +179,6 @@ class JsonLogHandler(logging.Handler):
                 "path": record.pathname
             }
             
-            # Add extra fields if present
             if hasattr(record, "extra"):
                 log_entry.update(record.extra)
             
@@ -226,24 +188,16 @@ class JsonLogHandler(logging.Handler):
             print(f"Error in JSON logging: {e}")
 
 def get_logger(component: LogComponent) -> logging.Logger:
-    """Get a logger for a specific component.
-    
-    Args:
-        component: The component to get a logger for
-        
-    Returns:
-        Logger configured for the component
-    """
+    """Get a logger for a specific component."""
     return logging.getLogger(component.value)
 
+def log_verbose(logger: logging.Logger, message: str) -> None:
+    """Log a message at VERBOSE level."""
+    if logger.isEnabledFor(VerbosityLevel.VERBOSE):
+        logger.log(VerbosityLevel.VERBOSE, message)
+
 def log_state(logger: logging.Logger, state: Dict[str, Any], prefix: str = "") -> None:
-    """Log a state dictionary in a readable format.
-    
-    Args:
-        logger: Logger to use
-        state: State dictionary to log
-        prefix: Optional prefix for log messages
-    """
+    """Log a state dictionary in a readable format."""
     try:
         for key, value in state.items():
             if isinstance(value, dict):
@@ -254,13 +208,9 @@ def log_state(logger: logging.Logger, state: Dict[str, Any], prefix: str = "") -
     except Exception as e:
         logger.error(f"Error logging state: {e}")
 
+# Utility functions
 def set_component_level(component: LogComponent, level: LogLevel) -> None:
-    """Set logging level for a specific component.
-    
-    Args:
-        component: Component to configure
-        level: Logging level to set
-    """
+    """Set logging level for a specific component."""
     logging.getLogger(component.value).setLevel(level.value)
 
 def disable_all_logging() -> None:

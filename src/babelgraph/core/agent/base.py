@@ -27,7 +27,7 @@ Key Features:
 
 Example:
     ```python
-    from alchemist.ai.base.tools import CalculatorTool
+    from babelgraph.core.tools import CalculatorTool
     
     agent = BaseAgent(tools=[CalculatorTool])
     await agent.run()
@@ -49,8 +49,13 @@ from mirascope.core import (
     prompt_template,
 )
 from openpipe import OpenAI as OpenPipeClient
-from babelgraph.tools.calculator import CalculatorTool
-from babelgraph.core.logging import LogComponent, AlchemistLoggingConfig, log_verbose, VerbosityLevel
+from babelgraph.core.tools import CalculatorTool
+from babelgraph.core.logging import (
+    LogComponent, 
+    BabelLoggingConfig,
+    log_verbose, 
+    VerbosityLevel
+)
 import json
 
 # Get logger for agent component
@@ -142,8 +147,8 @@ class BaseAgent(BaseModel):
         default_factory=list,
         description="List of tool classes available to the agent"
     )
-    logging_config: AlchemistLoggingConfig = Field(
-        default_factory=AlchemistLoggingConfig,
+    logging_config: BabelLoggingConfig = Field(
+        default_factory=BabelLoggingConfig,
         description="Controls the verbosity and detail of agent logs."
     )
     response_model: Optional[type[BaseModel]] = Field(
@@ -471,7 +476,7 @@ class BaseAgent(BaseModel):
 
 if __name__ == "__main__":
     import asyncio
-    from alchemist.ai.base.logging import configure_logging, LogLevel
+    from babelgraph.core.logging import configure_logging, LogLevel
     from pydantic import BaseModel, Field
     
     # Define example response models

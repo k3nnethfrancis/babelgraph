@@ -15,8 +15,8 @@ import asyncio
 import discord
 from pydantic import BaseModel, Field
 
-from alchemist.extensions.discord.client import DiscordClient
-from alchemist.ai.base.runtime import BaseChatRuntime, RuntimeConfig, BaseAgent
+from babelgraph.extensions.discord.client import DiscordClient
+from babelgraph.core.runtime import BaseChatRuntime, RuntimeConfig, BaseAgent
 
 logger = logging.getLogger(__name__)
 

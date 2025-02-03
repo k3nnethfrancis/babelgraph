@@ -6,13 +6,15 @@ components (agent and runtime).
 
 import pytest
 from typing import Dict, Any, List
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.runtime import BaseRuntime
+from babelgraph.core.logging import BabelLoggingConfig, VerbosityLevel
 
 from mirascope.core import BaseMessageParam, BaseTool
-from alchemist.ai.base.agent import BaseAgent
-from alchemist.ai.base.runtime import BaseRuntime
-from alchemist.ai.prompts.base import PersonaConfig
-from alchemist.ai.base.logging import AlchemistLoggingConfig, VerbosityLevel
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.runtime import BaseRuntime
+from babelgraph.core.logging import BabelLoggingConfig, VerbosityLevel
 
 
 class MockTool(BaseTool):
@@ -124,4 +126,11 @@ def sample_conversation() -> List[BaseMessageParam]:
         BaseMessageParam(role="assistant", content="Hi there! How can I help you?"),
         BaseMessageParam(role="user", content="What's the weather?"),
         BaseMessageParam(role="assistant", content="I don't have access to real-time weather data.")
-    ] 
+    ]
+
+
+class TestPersonaConfig(BaseModel):
+    """Simple test config to replace old PersonaConfig."""
+    name: str = Field(default="Test Agent")
+    role: str = Field(default="Testing")
+    traits: list[str] = Field(default_factory=lambda: ["helpful", "precise"]) 

@@ -23,9 +23,8 @@ import logging
 from pydantic import BaseModel, Field
 from babelgraph.core.runtime import RuntimeConfig, LocalRuntime
 from babelgraph.core.agent import BaseAgent
-from babelgraph.tools.image_generator import ImageGenerationTool
+from babelgraph.core.tools import ImageGenerationTool
 from babelgraph.core.logging import configure_logging, LogLevel, LogComponent
-from dotenv import load_dotenv
 
 # Optionally configure logging for a cleaner output
 # logger = logging.getLogger(__name__)
@@ -84,7 +83,6 @@ async def main():
 
     Loads environment variables and starts the LocalRuntime configured for chat.
     """
-    load_dotenv()  # Load environment variables if needed
     await run_with_runtime()
 
 

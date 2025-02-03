@@ -3,9 +3,9 @@ from typing import Dict, Any, Optional
 import pytest
 import asyncio
 
-from alchemist.ai.graph.base import Graph, Node
-from alchemist.ai.graph.config import GraphConfig
-from alchemist.ai.graph.state import NodeState
+from babelgraph.core.graph.base import Graph, Node
+from babelgraph.core.graph.config import GraphConfig
+from babelgraph.core.graph.state import NodeState
 from pydantic import Field
 
 

@@ -12,9 +12,11 @@ from typing import Dict, Any, List
 from pydantic import BaseModel
 
 from mirascope.core import BaseMessageParam, BaseTool, BaseDynamicConfig
-from alchemist.ai.base.agent import BaseAgent
-from alchemist.ai.prompts.base import PersonaConfig
-from alchemist.ai.base.logging import AlchemistLoggingConfig, VerbosityLevel
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.logging import BabelLoggingConfig, VerbosityLevel
+
+from babelgraph.core.agent.base import BaseAgent
+from babelgraph.core.logging import BabelLoggingConfig, VerbosityLevel
 
 
 class MockTool(BaseTool):

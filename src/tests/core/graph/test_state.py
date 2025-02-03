@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 from pydantic import Field
 
-from alchemist.ai.graph.state import NodeState, StateManager, NodeStatus
+from babelgraph.core.graph.state import NodeState, StateManager, NodeStatus
 
 
 @pytest.fixture

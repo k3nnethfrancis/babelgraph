@@ -44,7 +44,7 @@ babelgraph/
 
 ## 2. Core Architecture Updates
 
-1. **Agent System (COMPLETE)**
+1. **Agent System** (in src/core/agent/base.py):  
    - Provider-agnostic BaseAgent with Mirascope integration
    - Structured output support via response_model
    - Enhanced tool execution with both sync/async support
@@ -52,21 +52,32 @@ babelgraph/
    - Direct message processing via _step()
    - System prompt configuration with Pydantic models
 
-2. **Runtime Framework (SIMPLIFIED)**
-   - Focused on platform-specific behaviors
-   - BaseRuntime: Core functionality for environment management
-   - BaseChatRuntime: Interactive chat capabilities
-   - Platform Runtimes: Environment-specific integrations (e.g., Discord)
-   - Runtime injection only when platform-specific behavior needed
-   - No need for workflow-specific runtimes
+2. **Runtime System** (in src/core/agent/runtime.py):
+   - Flexible runtime environments for different interaction patterns
+   - Base classes for custom runtime implementation
+   - Platform-specific adaptations (e.g., Discord, Local)
+   - Key components:
+     * BaseRuntime: Core functionality
+     * BaseChatRuntime: Interactive chat capabilities
+     * Platform Runtimes: Environment-specific behaviors
+   - Features:
+     * Session management
+     * Streaming support
+     * Tool integration
+     * Environment-specific configurations
 
-3. **Graph System (REFACTORED)**
+3. **Graph System** (in src/core/graph/):
    - Pure orchestration layer for workflow management
-   - Handles node connections and transitions
-   - Manages state sharing between nodes
-   - Supports parallel execution and subgraphs
-   - AgentNodes use direct agent._step() calls
-   - Runtime injection available but optional
+   - Nodes can use different runtimes as needed
+   - State management and persistence
+   - Event emission for monitoring
+   - Parallel execution support
+   - Subgraph composition
+   - Built-in support for:
+     * Input validation via Pydantic
+     * Detailed logging of execution
+     * State preservation
+     * Callback hooks
 
 Key Design Decisions:
 1. **Separation of Concerns**
@@ -129,9 +140,9 @@ Example Patterns:
 
 ## 3. System Architecture Overview
 
-Alchemist is built around three major subsystems:
+Babelgraph is built around three major subsystems:
 
-1. **Agent System** (in alchemist/ai/base/agent.py):  
+1. **Agent System** (in src/core/agent/base.py):  
    - Provider-agnostic using Mirascope for LLM abstraction
    - Supports OpenPipe integration for custom models
    - Structured output via Pydantic models
@@ -141,7 +152,7 @@ Alchemist is built around three major subsystems:
    - Conversation history management
    - Can operate with different runtimes based on needs
 
-2. **Runtime System** (in alchemist/ai/base/runtime.py):
+2. **Runtime System** (in src/core/agent/runtime.py):
    - Flexible runtime environments for different interaction patterns
    - Base classes for custom runtime implementation
    - Platform-specific adaptations (e.g., Discord, Local)
@@ -155,7 +166,7 @@ Alchemist is built around three major subsystems:
      * Tool integration
      * Environment-specific configurations
 
-3. **Graph System** (in alchemist/ai/graph/):
+3. **Graph System** (in src/core/graph/):
    - Pure orchestration layer for workflow management
    - Nodes can use different runtimes as needed
    - State management and persistence
@@ -346,7 +357,7 @@ graph.add_node(processing_node)
 
 ## 8. Conclusion
 
-Alchemist has evolved into a robust framework for AI agent orchestration, with key features:
+Babelgraph has evolved into a robust framework for AI agent orchestration, with key features:
 
 1. Provider-agnostic agent system
 2. Flexible runtime environments
