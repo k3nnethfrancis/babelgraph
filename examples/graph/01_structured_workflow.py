@@ -16,7 +16,7 @@ The workflow:
 
 import asyncio
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from babelgraph.core.agent import BaseAgent
 from babelgraph.core.logging import (
@@ -30,7 +30,7 @@ from babelgraph.core.graph import (
     Graph,
     NodeState,
     AgentNode,
-    TerminalNode
+    Node
 )
 
 ###################################################################
@@ -92,12 +92,11 @@ class DecisionPrompt(BaseModel):
 
 class AnalyzerNode(AgentNode):
     """Analyzes input text and provides structured analysis."""
+    _logger: logging.Logger = PrivateAttr()
     
-    logger: Optional[Any] = Field(default=None, exclude=True)
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        object.__setattr__(self, 'logger', get_logger(LogComponent.WORKFLOW))
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._logger = get_logger(LogComponent.WORKFLOW)
     
     async def process(self, state: NodeState) -> Optional[str]:
         """Process input text and generate analysis."""
@@ -107,7 +106,7 @@ class AnalyzerNode(AgentNode):
             if not text:
                 raise ValueError("No input text provided")
             
-            self.logger.info(f"[{self.id}] Analyzing text ({len(text)} chars)")
+            self._logger.info(f"[{self.id}] Analyzing text ({len(text)} chars)")
             
             message = f"""Analyze this text and provide a structured response:
 
@@ -124,32 +123,31 @@ Remember to respond ONLY with a JSON object matching the required schema."""
             # Process with agent
             response = await self.agent._step(message)
             
-            self.logger.debug(f"[{self.id}] Analysis response: {response}")
+            self._logger.debug(f"[{self.id}] Analysis response: {response}")
             
             # Store result
             state.results[self.id] = {"response": response}
             
             if isinstance(response, TextAnalysis):
                 state.data['analysis'] = response
-                self.logger.info(f"[{self.id}] Analysis complete: {response.sentiment} sentiment, {len(response.topics)} topics")
+                self._logger.info(f"[{self.id}] Analysis complete: {response.sentiment} sentiment, {len(response.topics)} topics")
                 return "default"
             
-            self.logger.error(f"[{self.id}] Invalid response format")
+            self._logger.error(f"[{self.id}] Invalid response format")
             return "error"
             
         except Exception as e:
-            self.logger.error(f"[{self.id}] Process error: {str(e)}")
+            self._logger.error(f"[{self.id}] Process error: {str(e)}")
             state.add_error(self.id, str(e))
             return "error"
 
 class DecisionNode(AgentNode):
     """Makes decisions based on text analysis."""
+    _logger: logging.Logger = PrivateAttr()
     
-    logger: Optional[Any] = Field(default=None, exclude=True)
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        object.__setattr__(self, 'logger', get_logger(LogComponent.WORKFLOW))
+    def __init__(self, **data):
+        super().__init__(**data)
+        self._logger = get_logger(LogComponent.WORKFLOW)
     
     async def process(self, state: NodeState) -> Optional[str]:
         """Process analysis and make decision."""
@@ -159,7 +157,7 @@ class DecisionNode(AgentNode):
             if not analysis:
                 raise ValueError("No analysis data available")
             
-            self.logger.info(f"[{self.id}] Making decision based on analysis")
+            self._logger.info(f"[{self.id}] Making decision based on analysis")
             
             message = f"""Based on this analysis, decide what action to take:
 
@@ -179,21 +177,21 @@ Remember to respond ONLY with a JSON object matching the required schema."""
             # Process with agent
             response = await self.agent._step(message)
             
-            self.logger.debug(f"[{self.id}] Decision response: {response}")
+            self._logger.debug(f"[{self.id}] Decision response: {response}")
             
             # Store result
             state.results[self.id] = {"response": response}
             
             if isinstance(response, ActionDecision):
                 state.data['decision'] = response
-                self.logger.info(f"[{self.id}] Decision made: {response.action} (priority: {response.priority})")
+                self._logger.info(f"[{self.id}] Decision made: {response.action} (priority: {response.priority})")
                 return "default"
             
-            self.logger.error(f"[{self.id}] Invalid response format")
+            self._logger.error(f"[{self.id}] Invalid response format")
             return "error"
             
         except Exception as e:
-            self.logger.error(f"[{self.id}] Process error: {str(e)}")
+            self._logger.error(f"[{self.id}] Process error: {str(e)}")
             state.add_error(self.id, str(e))
             return "error"
 
@@ -209,7 +207,8 @@ async def main():
         component_levels={
             LogComponent.AGENT: LogLevel.DEBUG,
             LogComponent.WORKFLOW: LogLevel.INFO,
-            LogComponent.GRAPH: LogLevel.INFO
+            LogComponent.GRAPH: LogLevel.INFO,
+            LogComponent.NODES: LogLevel.INFO
         }
     )
     logger = get_logger(LogComponent.WORKFLOW)
@@ -259,7 +258,11 @@ async def main():
             }
         )
         
-        end = TerminalNode(id="end")
+        # Create a terminal node using the base Node class
+        end = Node(
+            id="end",
+            next_nodes={}  # No transitions from terminal node
+        )
         
         # Add nodes to graph
         for node in [analyzer, decision, end]:

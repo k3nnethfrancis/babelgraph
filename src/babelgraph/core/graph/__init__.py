@@ -13,9 +13,7 @@ from babelgraph.core.graph.state import NodeState, NodeStatus
 from babelgraph.core.graph.nodes import (
     Node,
     ActionNode,
-    AgentNode,
-    ContextNode,
-    TerminalNode
+    AgentNode
 )
 
 __all__ = [
@@ -27,7 +25,5 @@ __all__ = [
     # Node types
     'Node',
     'ActionNode',
-    'AgentNode',
-    'ContextNode',
-    'TerminalNode',
+    'AgentNode'
 ]

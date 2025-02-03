@@ -33,14 +33,16 @@ from typing import Dict, Any, Optional, Union, List, Set
 import logging
 import asyncio
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
 from babelgraph.core.logging import (
     LogComponent,
     BabelLoggingConfig,
     log_verbose,
     VerbosityLevel,
-    get_logger
+    get_logger,
+    configure_logging,
+    LogLevel
 )
 from babelgraph.core.graph.state import NodeState, NodeStatus
 from babelgraph.core.graph.nodes.base.node import Node
@@ -67,13 +69,14 @@ class Graph(BaseModel):
     logging_config: BabelLoggingConfig = Field(
         default_factory=BabelLoggingConfig
     )
+    _logger: logging.Logger = PrivateAttr()
 
     class Config:
         arbitrary_types_allowed = True
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.logger = get_logger(LogComponent.GRAPH)
+        self._logger = get_logger(LogComponent.GRAPH)
 
     def add_node(self, node: Node) -> None:
         """Register a node with the graph.
@@ -91,7 +94,7 @@ class Graph(BaseModel):
             raise ValueError(f"Node {node.id} failed validation")
 
         self.nodes[node.id] = node
-        logger.info(f"Added node: {node.id} of type {type(node).__name__}")
+        self._logger.info(f"Added node: {node.id} of type {type(node).__name__}")
 
     def add_edge(self, from_node_id: str, transition_key: str, to_node_id: str) -> None:
         """Add a directed edge between nodes.
@@ -110,7 +113,7 @@ class Graph(BaseModel):
             raise ValueError(f"Target node not found: {to_node_id}")
 
         self.nodes[from_node_id].next_nodes[transition_key] = to_node_id
-        logger.info(
+        self._logger.info(
             f"Added edge: {from_node_id} --[{transition_key}]--> {to_node_id}"
         )
 
@@ -127,7 +130,7 @@ class Graph(BaseModel):
         if node_id not in self.nodes:
             raise ValueError(f"Node not found: {node_id}")
         self.entry_points[name] = node_id
-        logger.info(f"Set entry point '{name}' to node: {node_id}")
+        self._logger.info(f"Set entry point '{name}' to node: {node_id}")
 
     def chain(self, nodes: List[Node], transition_key: str = "next") -> None:
         """Connect a sequence of nodes in order.
@@ -175,7 +178,7 @@ class Graph(BaseModel):
         for name, node_id in other.entry_points.items():
             self.entry_points[f"{namespace}.{name}"] = f"{namespace}.{node_id}"
             
-        logger.info(f"Composed graph under namespace: {namespace}")
+        self._logger.info(f"Composed graph under namespace: {namespace}")
 
     async def run(
         self,
@@ -206,13 +209,13 @@ class Graph(BaseModel):
             raise ValueError(f"Entry point not found: {entry_point}")
 
         current_node_id = self.entry_points[entry_point]
-        logger.info(f"Starting graph execution at node: {current_node_id}")
+        self._logger.info(f"Starting graph execution at node: {current_node_id}")
 
         iteration_count = 0
         while current_node_id:
             iteration_count += 1
             if iteration_count > max_iterations:
-                logger.error("Maximum loop iterations exceeded, aborting execution.")
+                self._logger.error("Maximum loop iterations exceeded, aborting execution.")
                 break
             node = self.nodes[current_node_id]
 
@@ -232,16 +235,16 @@ class Graph(BaseModel):
                 )
 
                 if current_node_id:
-                    logger.info(
+                    self._logger.info(
                         f"Transitioning {node.id} --[{transition_key}]--> {current_node_id}"
                     )
                 else:
-                    logger.info(f"Reached terminal node: {node.id}")
+                    self._logger.info(f"Reached terminal node: {node.id}")
 
             except Exception as e:
                 state.mark_status(current_node_id, NodeStatus.ERROR)
                 state.add_error(current_node_id, str(e))
-                logger.error(f"Error in node {node.id}: {e}")
+                self._logger.error(f"Error in node {node.id}: {e}")
                 raise
 
         return state
@@ -297,6 +300,16 @@ async def test_graph() -> None:
     3. Shows how to attach context suppliers to NodeState.
     """
     import asyncio
+    from babelgraph.core.logging import configure_logging, LogLevel, LogComponent
+
+    # Configure logging for tests
+    configure_logging(
+        default_level=LogLevel.INFO,
+        component_levels={
+            LogComponent.GRAPH: LogLevel.INFO,
+            LogComponent.NODES: LogLevel.INFO
+        }
+    )
 
     # Local test Node definitions (example only)
     class AddNode(Node):
@@ -338,7 +351,7 @@ async def test_graph() -> None:
     graph.add_edge("multiply", "default", "slow1")
     graph.add_edge("slow1", "default", "slow2")
 
-    graph.add_entry_point("main", "add")
+    graph.set_entry_point("add", "main")
 
     # Validate and run
     errors = graph.validate()
