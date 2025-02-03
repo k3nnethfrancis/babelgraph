@@ -29,7 +29,7 @@ Example:
     ```
 """
 
-from typing import Dict, Any, Optional, Union, List, Set
+from typing import Dict, Any, Optional, Union, List, Set, Tuple
 import logging
 import asyncio
 from datetime import datetime
@@ -117,27 +117,27 @@ class Graph(BaseModel):
             f"Added edge: {from_node_id} --[{transition_key}]--> {to_node_id}"
         )
 
-    def set_entry_point(self, node_id: str, name: str = "default") -> None:
-        """Set an entry point for the graph.
-
+    def set_entry_point(self, node_id: str) -> None:
+        """Set the entry point for the graph.
+        
         Args:
-            node_id: ID of the starting node
-            name: Optional name for the entry point (defaults to "default")
-
-        Raises:
-            ValueError: If node_id is not found
+            node_id: The ID of the node to use as entry point
         """
         if node_id not in self.nodes:
-            raise ValueError(f"Node not found: {node_id}")
-        self.entry_points[name] = node_id
-        self._logger.info(f"Set entry point '{name}' to node: {node_id}")
+            raise ValueError(f"Node {node_id} not found in graph")
+        self.entry_points["default"] = node_id
+        logger.info(f"Set entry point to node: {node_id}")
 
-    def chain(self, nodes: List[Node], transition_key: str = "next") -> None:
-        """Connect a sequence of nodes in order.
-
-        Args:
-            nodes: List of nodes to chain together
-            transition_key: Key to use for transitions (defaults to "next")
+    def chain(self, nodes: List[Node], transition_key: str = "success") -> None:
+        """Chain nodes together in sequence.
+        
+        Example:
+            graph.chain([analyzer, decision, end])
+            
+        This will automatically:
+        1. Add all nodes to the graph
+        2. Connect them in sequence using the transition_key
+        3. Set the first node as entry point if none exists
         """
         for node in nodes:
             self.add_node(node)
@@ -148,6 +148,63 @@ class Graph(BaseModel):
         # Set first node as default entry if no entry points exist
         if not self.entry_points:
             self.set_entry_point(nodes[0].id)
+            
+    def branch(self, node: Node, conditions: Dict[str, Node]) -> None:
+        """Create conditional branches from a node.
+        
+        Example:
+            graph.branch(analyzer, {
+                "positive": positive_handler,
+                "negative": negative_handler,
+                "neutral": neutral_handler
+            })
+        """
+        self.add_node(node)
+        for condition, target_node in conditions.items():
+            self.add_node(target_node)
+            self.add_edge(node.id, condition, target_node.id)
+            
+    def merge(self, nodes: List[Node], target: Node, condition: str = "success") -> None:
+        """Merge multiple nodes into a single target node.
+        
+        Example:
+            graph.merge([pos_handler, neg_handler], final_node)
+        """
+        self.add_node(target)
+        for node in nodes:
+            self.add_node(node)
+            self.add_edge(node.id, condition, target.id)
+            
+    def create_workflow(self, nodes: Dict[str, Node], flows: List[Tuple[str, str, str]]) -> None:
+        """Create a workflow from a dictionary of nodes and flow definitions.
+        
+        Example:
+            graph.create_workflow(
+                nodes={
+                    "analyze": analyzer,
+                    "decide": decision,
+                    "end": end_node
+                },
+                flows=[
+                    ("analyze", "success", "decide"),
+                    ("analyze", "error", "end"),
+                    ("decide", "success", "end")
+                ]
+            )
+        """
+        # Add all nodes with their dictionary keys as IDs
+        for node_id, node in nodes.items():
+            if not node.id:  # Only set ID if not already set
+                node.id = node_id
+            self.add_node(node)
+            
+        # Create flows
+        for source, condition, target in flows:
+            self.add_edge(source, condition, target)
+            
+        # Set first node as entry point if none exists
+        if not self.entry_points and flows:
+            self.set_entry_point(flows[0][0])  # First source node
 
     def compose(self, other: "Graph", namespace: str) -> None:
         """Compose another graph into this one under a namespace.
@@ -180,86 +237,46 @@ class Graph(BaseModel):
             
         self._logger.info(f"Composed graph under namespace: {namespace}")
 
-    async def run(
-        self,
-        entry_point: Optional[str] = None,
-        state: Optional[NodeState] = None,
-        max_iterations: int = 10
-    ) -> NodeState:
-        """Run the graph from a specified entry point.
-
+    async def run(self, entry_point: Optional[str] = None, state: Optional[NodeState] = None) -> NodeState:
+        """Run the graph from the entry point.
+        
         Args:
-            entry_point: Name of entry point (defaults to "default")
-            state: Optional initial state
-            max_iterations: Maximum number of node transitions to execute before aborting
-
+            entry_point: Optional override for the graph's entry point
+            state: Optional initial state, creates new state if None
+            
         Returns:
-            Final NodeState after execution
-
-        Raises:
-            ValueError: If entry point is not found
+            The final state after graph execution
         """
+        # Use provided entry point or graph's default
+        current_node_id = entry_point or self.entry_points["default"]
+        if not current_node_id:
+            raise ValueError("No entry point specified")
+        if current_node_id not in self.nodes:
+            raise ValueError(f"Entry point not found: {current_node_id}")
+            
         # Initialize or use provided state
-        if state is None:
-            state = NodeState()
-
-        # Use default entry point if none specified
-        entry_point = entry_point or "default"
-        if entry_point not in self.entry_points:
-            raise ValueError(f"Entry point not found: {entry_point}")
-
-        current_node_id = self.entry_points[entry_point]
-        self._logger.info(f"Starting graph execution at node: {current_node_id}")
-
-        iteration_count = 0
-        while current_node_id:
-            iteration_count += 1
-            if iteration_count > max_iterations:
-                self._logger.error("Maximum loop iterations exceeded, aborting execution.")
-                break
-            node = self.nodes[current_node_id]
-
-            # Update node status
-            state.mark_status(current_node_id, NodeStatus.RUNNING)
-            state.start_time = datetime.now()
-
-            try:
+        state = state or NodeState()
+        state.start_time = datetime.now()
+        
+        try:
+            while current_node_id:
+                current_node = self.nodes[current_node_id]
+                logger.debug(f"Processing node: {current_node_id}")
+                
                 # Process node
-                transition_key = await self._process_node(node, state)
-                state.mark_status(current_node_id, NodeStatus.COMPLETED)
-
-                # Get next node if transition exists
-                current_node_id = (
-                    node.next_nodes.get(transition_key)
-                    if transition_key else None
-                )
-
-                if current_node_id:
-                    self._logger.info(
-                        f"Transitioning {node.id} --[{transition_key}]--> {current_node_id}"
-                    )
-                else:
-                    self._logger.info(f"Reached terminal node: {node.id}")
-
-            except Exception as e:
-                state.mark_status(current_node_id, NodeStatus.ERROR)
-                state.add_error(current_node_id, str(e))
-                self._logger.error(f"Error in node {node.id}: {e}")
-                raise
-
-        return state
-
-    async def _process_node(self, node: Node, state: NodeState) -> Optional[str]:
-        """Process a single node.
-
-        Args:
-            node: Node to process
-            state: Current state
-
-        Returns:
-            Optional transition key for next node
-        """
-        return await node.process(state)
+                next_condition = await current_node.process(state)
+                logger.debug(f"Node {current_node_id} returned condition: {next_condition}")
+                
+                # Get next node based on condition
+                current_node_id = current_node.get_next_node(next_condition)
+                logger.debug(f"Next node: {current_node_id}")
+                
+            return state
+            
+        except Exception as e:
+            logger.error(f"Error in graph execution: {e}")
+            state.errors["graph"] = str(e)
+            raise
 
     def validate(self) -> List[str]:
         """Validate the graph configuration.
@@ -351,7 +368,7 @@ async def test_graph() -> None:
     graph.add_edge("multiply", "default", "slow1")
     graph.add_edge("slow1", "default", "slow2")
 
-    graph.set_entry_point("add", "main")
+    graph.set_entry_point("add")
 
     # Validate and run
     errors = graph.validate()
@@ -372,7 +389,7 @@ async def test_graph() -> None:
     # state.context.add_supplier("time", time_supplier)
 
     start_time = datetime.now()
-    final_state = await graph.run("main", state)
+    final_state = await graph.run("add", state)
     end_time = datetime.now()
 
     # Verify results

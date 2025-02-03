@@ -12,16 +12,87 @@ Typical Usage:
 """
 
 import abc
-from typing import Tuple, Dict, Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING
+from typing import Tuple, Dict, Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING, Callable
+from functools import wraps
 from pydantic import BaseModel, Field, model_validator
 from babelgraph.core.logging import get_logger, LogComponent
 from babelgraph.core.graph.state import NodeStateProtocol
+import json
+from babelgraph.core.logging import Colors
 
 if TYPE_CHECKING:
     from babelgraph.core.graph.state import NodeState
 
 # Get logger for node operations
 logger = get_logger(LogComponent.NODES)
+
+def terminal_node(cls):
+    """Decorator to mark a node as terminal.
+    
+    Example:
+        @terminal_node
+        class EndNode(Node):
+            async def process(self, state: NodeState) -> Optional[str]:
+                # Process and display results
+                return None
+    """
+    cls.is_terminal = True
+    cls.next_nodes = {}
+    return cls
+
+def state_handler(func: Callable):
+    """Decorator to handle state updates and error handling.
+    
+    This decorator provides flexible state management:
+    1. Basic success/error states
+    2. Custom state transitions
+    3. Conditional state handling
+    
+    Example (Basic):
+        @state_handler
+        async def process(self, state):
+            # Basic success/error
+            return "success"
+    
+    Example (Custom States):
+        @state_handler
+        async def process(self, state):
+            result = await self.analyze()
+            # Return any state that matches your next_nodes
+            return "high_confidence" if result.score > 0.8 else "low_confidence"
+            
+    Example (Conditional):
+        @state_handler
+        async def process(self, state):
+            if self.is_validation_node:
+                return "valid" if validate() else "invalid"
+            return "default"
+    """
+    @wraps(func)
+    async def wrapper(self, state: "NodeState") -> Optional[str]:
+        try:
+            # Mark node as running
+            state.mark_status(self.id, "running")
+            
+            # Execute the process function
+            result = await func(self, state)
+            
+            # Mark as completed if we got a valid transition
+            if result in self.next_nodes or result is None and self.is_terminal:
+                state.mark_status(self.id, "completed")
+            else:
+                state.mark_status(self.id, "error")
+                state.add_error(self.id, f"Invalid transition state: {result}")
+                return "error"
+            
+            return result
+        except Exception as e:
+            # Handle errors
+            state.mark_status(self.id, "error")
+            state.add_error(self.id, str(e))
+            logger.error(f"Error in node {self.id}: {e}")
+            return "error"
+    return wrapper
 
 class Node(BaseModel):
     """
@@ -33,6 +104,7 @@ class Node(BaseModel):
         metadata: Optional node metadata
         parallel: Whether node can run in parallel
         input_map: Mapping of parameter names to state references
+        is_terminal: Whether the node is terminal
     """
     id: str = Field(..., description="Unique identifier for this node")
     next_nodes: Dict[str, Optional[str]] = Field(
@@ -41,6 +113,7 @@ class Node(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     parallel: bool = Field(default=False)
     input_map: Dict[str, str] = Field(default_factory=dict)
+    is_terminal: bool = Field(default=False)
 
     class Config:
         arbitrary_types_allowed = True
@@ -188,4 +261,152 @@ class Node(BaseModel):
                 raise ValueError(error_msg)
 
         logger.debug(f"Node {self.id}: Final prepared input data: {input_data}")
-        return input_data 
+        return input_data
+
+    # Helper methods for state management
+    def update_state(self, state: "NodeState", key: str, value: Any) -> None:
+        """Update state with a key-value pair."""
+        state.data[key] = value
+        
+    def get_state(self, state: "NodeState", key: str, default: Any = None) -> Any:
+        """Get value from state."""
+        return state.data.get(key, default)
+        
+    def _log_node_result(self, state: "NodeState", result: Any, suppress: bool = False) -> None:
+        """Log node results at INFO level.
+        
+        Args:
+            state: Current node state
+            result: Result to log
+            suppress: Whether to suppress logging (useful for streaming)
+        """
+        if suppress:
+            return
+            
+        try:
+            # Format result based on type
+            if hasattr(result, 'model_dump_json'):
+                formatted = result.model_dump_json(indent=2)
+            elif isinstance(result, dict):
+                formatted = json.dumps(result, indent=2)
+            else:
+                formatted = str(result)
+            
+            # Log the result with node context
+            logger.info(
+                f"\n{Colors.BOLD}Node {self.id} Output:{Colors.RESET}\n"
+                f"{Colors.INFO}{formatted}{Colors.RESET}\n"
+                f"{Colors.DIM}{'─' * 50}{Colors.RESET}"
+            )
+        except Exception as e:
+            logger.error(f"Error logging node {self.id} result: {str(e)}")
+
+    def set_result(self, state: "NodeState", key: str, value: Any, suppress_logging: bool = False) -> None:
+        """Store a result in the state and optionally log it.
+        
+        Args:
+            state: The node state to update
+            key: Key for the result
+            value: Value to store
+            suppress_logging: Whether to suppress result logging (useful for streaming)
+        """
+        if self.id not in state.results:
+            state.results[self.id] = {}
+        state.results[self.id][key] = value
+        
+        # Log the result if it's the primary output and logging isn't suppressed
+        if key == 'response' and not suppress_logging:
+            self._log_node_result(state, value)
+
+    # Helper methods for node configuration
+    def add_next_node(self, condition: str, node_id: Optional[str]) -> None:
+        """Add a transition to another node."""
+        self.next_nodes[condition] = node_id
+        
+    def remove_next_node(self, condition: str) -> None:
+        """Remove a transition."""
+        self.next_nodes.pop(condition, None)
+        
+    def set_metadata(self, key: str, value: Any) -> None:
+        """Set metadata value."""
+        self.metadata[key] = value
+        
+    def get_metadata(self, key: str, default: Any = None) -> Any:
+        """Get metadata value."""
+        return self.metadata.get(key, default)
+
+    def set_input(self, state: "NodeState", value: Any, key: str = "input") -> None:
+        """
+        Set input value in state with optional key name.
+        
+        Args:
+            state: The node state to update
+            value: The input value to set
+            key: Optional key name, defaults to "input"
+        """
+        state.data[f"{self.id}_{key}"] = value
+        
+    def get_input(self, state: "NodeState", key: str = "input", default: Any = None) -> Any:
+        """
+        Get input value from state with optional key name.
+        
+        Args:
+            state: The node state to read from
+            key: Optional key name, defaults to "input"
+            default: Default value if not found
+            
+        Returns:
+            The input value or default if not found
+        """
+        return state.data.get(f"{self.id}_{key}", default)
+
+    def set_message_input(self, state: "NodeState", content: str, role: str = "user") -> None:
+        """
+        Set a message input in state with role.
+        
+        Args:
+            state: The node state to update
+            content: The message content
+            role: Message role (user/assistant/system)
+        """
+        message = {
+            "role": role,
+            "content": content
+        }
+        self.set_input(state, message, key="message")
+        
+    def get_message_input(self, state: "NodeState", default: Optional[Dict] = None) -> Optional[Dict]:
+        """
+        Get message input from state.
+        
+        Args:
+            state: The node state to read from
+            default: Default value if not found
+            
+        Returns:
+            The message dict or default if not found
+        """
+        return self.get_input(state, key="message", default=default)
+
+    def clear_input(self, state: "NodeState", key: str = "input") -> None:
+        """
+        Clear input value from state.
+        
+        Args:
+            state: The node state to update
+            key: Optional key name, defaults to "input"
+        """
+        state.data.pop(f"{self.id}_{key}", None)
+        
+    def has_input(self, state: "NodeState", key: str = "input") -> bool:
+        """
+        Check if input exists in state.
+        
+        Args:
+            state: The node state to check
+            key: Optional key name, defaults to "input"
+            
+        Returns:
+            True if input exists, False otherwise
+        """
+        return f"{self.id}_{key}" in state.data 

@@ -32,7 +32,7 @@ pip install babelgraph
 Here's a simple example of creating a workflow:
 
 ```python
-from babelgraph import Graph, AgentNode, Node
+from babelgraph import Graph, AgentNode, Node, terminal_node, state_handler
 from babelgraph.core.logging import configure_logging, LogLevel, LogComponent
 
 # Configure logging
@@ -44,43 +44,48 @@ configure_logging(
     }
 )
 
-# Create nodes
-analyzer = AgentNode(
-    id="analyzer",
-    agent=BaseAgent(
-        system_prompt=AnalyzerPrompt(),
-        response_model=TextAnalysis
-    ),
-    next_nodes={
-        "default": "decision",
-        "error": "end"
-    }
-)
+# Define nodes with decorators
+@terminal_node
+class EndNode(Node):
+    @state_handler
+    async def process(self, state):
+        # Display results
+        return None
 
-decision = AgentNode(
-    id="decision",
-    agent=BaseAgent(
-        system_prompt=DecisionPrompt(),
-        response_model=ActionDecision
-    ),
-    next_nodes={
-        "default": "end",
-        "error": "end"
-    }
-)
-
-# Terminal node
-end = Node(id="end", next_nodes={})
-
-# Create and run graph
+# Create workflow declaratively
 graph = Graph()
-graph.add_node(analyzer)
-graph.add_node(decision)
-graph.add_node(end)
-graph.set_entry_point("analyzer")
+graph.create_workflow(
+    nodes={
+        "analyzer": AnalyzerNode(
+            id="analyzer",
+            agent=BaseAgent(
+                system_prompt="You are a text analysis expert.",
+                response_model=TextAnalysis
+            )
+        ),
+        "decision": DecisionNode(
+            id="decision",
+            agent=BaseAgent(
+                system_prompt="You are a decision-making expert.",
+                response_model=ActionDecision
+            )
+        ),
+        "end": EndNode(id="end")
+    },
+    flows=[
+        ("analyzer", "success", "decision"),
+        ("analyzer", "error", "end"),
+        ("decision", "success", "end")
+    ]
+)
+
+# Or use helper methods for common patterns
+graph.chain([node1, node2, node3])  # Sequential flow
+graph.branch(node, {"yes": yes_node, "no": no_node})  # Branching
+graph.merge([path1, path2], final_node)  # Merging paths
 
 # Run workflow
-state = await graph.run("start")
+state = await graph.run("analyzer")
 ```
 
 ## 📚 Documentation

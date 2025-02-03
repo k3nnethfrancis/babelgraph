@@ -1,29 +1,26 @@
-"""Graph system for AI workflow orchestration.
+"""Graph package initialization.
 
-This package provides a lightweight framework for composing AI workflows using:
-- Directed graph-based orchestration
-- State management and persistence
-- Agent and action nodes
-- Subgraph composition
-- Parallel execution support
+Exposes core graph components and helpers for building workflows.
 """
 
 from babelgraph.core.graph.base import Graph
 from babelgraph.core.graph.state import NodeState, NodeStatus
-from babelgraph.core.graph.nodes import (
+from babelgraph.core.graph.nodes.base.node import (
     Node,
-    ActionNode,
-    AgentNode
+    terminal_node,
+    state_handler
 )
+from babelgraph.core.graph.nodes.agent import AgentNode
 
 __all__ = [
-    # Core components
-    'Graph',
-    'NodeState',
-    'NodeStatus',
+    # Core classes
+    "Graph",
+    "Node",
+    "AgentNode",
+    "NodeState",
+    "NodeStatus",
     
-    # Node types
-    'Node',
-    'ActionNode',
-    'AgentNode'
+    # Decorators and helpers
+    "terminal_node",
+    "state_handler",
 ]

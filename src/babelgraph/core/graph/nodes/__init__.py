@@ -1,11 +1,21 @@
-"""Node types for graph workflows."""
+"""Node package initialization.
 
-from babelgraph.core.graph.nodes.base.node import Node
-from babelgraph.core.graph.nodes.actions import ActionNode
+Exposes node types and helpers for building workflows.
+"""
+
+from babelgraph.core.graph.nodes.base.node import (
+    Node,
+    terminal_node,
+    state_handler
+)
 from babelgraph.core.graph.nodes.agent import AgentNode
 
 __all__ = [
-    'Node',
-    'ActionNode',
-    'AgentNode',
+    # Base node types
+    "Node",
+    "AgentNode",
+    
+    # Decorators and helpers
+    "terminal_node",
+    "state_handler",
 ]

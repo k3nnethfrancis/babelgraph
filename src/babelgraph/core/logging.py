@@ -90,7 +90,6 @@ class LogComponent(str, Enum):
     GRAPH = "babelgraph.core.graph"
     NODES = "babelgraph.core.graph.nodes"
     TOOLS = "babelgraph.core.tools"
-    PROMPTS = "babelgraph.core.prompts"
     DISCORD = "babelgraph.extensions.discord"
     WORKFLOW = "babelgraph.core.graph.workflow"
     SESSION = "babelgraph.core.session"

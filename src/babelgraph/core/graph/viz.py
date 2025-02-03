@@ -1,6 +1,6 @@
 """Graph visualization tools."""
 
-from babelgraph.core.state import NodeState
+from babelgraph.core.graph.state import NodeState
 
 class GraphVisualizer:
     """Visualize graph structure and execution."""

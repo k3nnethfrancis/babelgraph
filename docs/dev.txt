@@ -157,23 +157,48 @@ Environment management for different execution contexts.
 # Simple terminal node
 end = Node(
     id="end",
-    next_nodes={}  # Empty dict means terminal
+    next_nodes={},  # Empty dict means terminal
+    metadata={}     # Optional metadata for node behavior
 )
 ```
 
 ### 2. Agent Nodes
+Agent nodes require:
+- response_model: Pydantic model for structured output
+- agent: BaseAgent instance with matching response_model
+- next_nodes: Mapping of conditions to next node IDs
+
+Example:
 ```python
 class AnalyzerNode(AgentNode):
-    _logger: logging.Logger = PrivateAttr()
+    """Agent node for structured analysis."""
+    _logger: logging.Logger = PrivateAttr(default_factory=lambda: get_logger(LogComponent.NODES))
+    
+    def __init__(self, **data):
+        super().__init__(
+            response_model=AnalysisResponse,  # Required
+            **data
+        )
     
     async def process(self, state: NodeState) -> Optional[str]:
         try:
+            # Get input from state
+            message = self.format_prompt(state)
+            
+            # Process with agent
             response = await self.agent._step(message)
+            
+            # Validate response type
             if isinstance(response, self.response_model):
+                state.results[self.id] = {"response": response}
                 return "success"
+            
+            self._logger.error(f"Invalid response type: {type(response)}")
             return "error"
+            
         except Exception as e:
             self._logger.error(f"Process error: {e}")
+            state.errors[self.id] = str(e)
             return "error"
 ```
 
@@ -181,20 +206,51 @@ class AnalyzerNode(AgentNode):
 ```python
 # Configure logging
 configure_logging(
-    LogLevel.INFO,
+    default_level=LogLevel.INFO,
     component_levels={
         LogComponent.GRAPH: LogLevel.INFO,
-        LogComponent.NODES: LogLevel.DEBUG
-    }
+        LogComponent.NODES: LogLevel.DEBUG,
+        LogComponent.AGENT: LogLevel.DEBUG
+    },
+    pretty=True  # Enable pretty formatting
 )
 
-# Create workflow
-graph = Graph()
+# Create workflow with config
+graph = Graph(
+    config=GraphConfig(
+        max_parallel=4,    # Maximum parallel nodes
+        timeout=60,        # Node timeout in seconds
+        retry_count=3      # Number of retries on failure
+    )
+)
+
+# Add nodes
 graph.add_node(start_node)
 graph.add_node(process_node)
 graph.add_node(Node(id="end", next_nodes={}))
+
+# Set entry point
 graph.set_entry_point("start")
+
+# Initialize state
+state = NodeState()
+state.data["input"] = "Initial data"
+
+# Run graph
+final_state = await graph.run("start", state)
 ```
+
+The key improvements are:
+
+1. Added proper initialization of AgentNode with response_model
+2. Added state management in the process method
+3. Improved error handling and logging
+4. Added more comprehensive graph configuration options
+5. Added state initialization example
+6. Added proper type hints and docstrings
+7. Added metadata field to terminal nodes
+
+Would you like me to expand on any of these patterns or add additional examples?
 
 ---
 
@@ -271,3 +327,88 @@ graph.set_entry_point("start")
 4. Use proper logging
 5. Consider error cases
 6. Keep nodes modular
+
+### Structured Outputs and Graph Workflows
+
+The BaseAgent has been refactored to support structured outputs using Pydantic models and JSON mode. As a result, the graph orchestration system now supports chaining agent and action nodes with structured response data. When linking multiple agent nodes, please ensure that outputs from upstream nodes are serialized as valid JSON (using json.dumps(...)) before being passed to downstream nodes. This guarantees consistency when processing responses and enables advanced features such as streaming responses and executing actions based on structured data.
+
+Users have the flexibility to share agent instances across nodes to preserve state or use independent agents, allowing dynamic workflows ranging from a single node chat to multi-agent collaborations.
+
+### Node Decorators and Helpers
+
+1. **@terminal_node**
+   - Marks a node as terminal (no outgoing edges)
+   - Automatically sets empty next_nodes
+   - Used for end nodes or result display nodes
+
+```python
+@terminal_node
+class EndNode(Node):
+    async def process(self, state):
+        # Display or process final results
+        return None
+```
+
+2. **@state_handler**
+   - Handles state transitions and error management
+   - Automatically marks node status (running/completed/error)
+   - Provides consistent error handling
+
+```python
+@state_handler
+async def process(self, state):
+    # Your processing logic here
+    return "success"
+```
+
+3. **State Management Helpers**
+   - `update_state(state, key, value)`: Update state data
+   - `get_state(state, key, default=None)`: Get state value
+   - `set_result(state, key, value)`: Store node result
+   - `get_result(state, node_id, key, default=None)`: Get node result
+
+### Workflow Composition
+
+1. **Declarative Workflow Creation**
+```python
+graph.create_workflow(
+    nodes={
+        "analyze": analyzer,
+        "decide": decision,
+        "end": end_node
+    },
+    flows=[
+        ("analyze", "success", "decide"),
+        ("analyze", "error", "end")
+    ]
+)
+```
+
+2. **Sequential Chaining**
+```python
+graph.chain([node1, node2, node3])
+```
+
+3. **Conditional Branching**
+```python
+graph.branch(analyzer, {
+    "positive": positive_handler,
+    "negative": negative_handler
+})
+```
+
+4. **Path Merging**
+```python
+graph.merge([path1, path2], final_node)
+```
+
+5. **Graph Composition**
+```python
+main_graph.compose(subgraph, "agent1")
+```
+
+### Structured Outputs
+
+The BaseAgent has been refactored to support structured outputs using Pydantic models and JSON mode. When linking multiple agent nodes, please ensure that outputs from upstream nodes are serialized as valid JSON (using model_dump_json()) before being passed to downstream nodes. This guarantees consistency when processing responses and enables advanced features such as streaming responses and executing actions based on structured data.
+
+Users have the flexibility to share agent instances across nodes to preserve state or use independent agents, allowing dynamic workflows ranging from a single node chat to multi-agent collaborations.

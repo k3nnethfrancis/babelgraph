@@ -124,18 +124,8 @@ class ActionNode(Node):
 
             # Store results with timing
             elapsed = (datetime.now() - start_time).total_seconds()
-            state.results[self.id] = {
-                self.output_key: result,
-                "timing": elapsed
-            }
-
-            # Log completion with results
-            logger.info(
-                f"\n{Colors.SUCCESS}✓ Node '{self.id}' completed in {elapsed:.2f}s{Colors.RESET}"
-                f"\n{Colors.DIM}{'─' * 40}{Colors.RESET}"
-                f"\n{Colors.INFO}{result}{Colors.RESET}"
-                f"\n{Colors.DIM}{'─' * 40}{Colors.RESET}\n"
-            )
+            self.set_result(state, self.output_key, result)
+            self.set_result(state, "timing", elapsed)
 
             # Handle callbacks
             if "on_complete" in self.metadata:

@@ -12,9 +12,10 @@ Supports:
 
 import logging
 import asyncio
-from typing import Optional, Dict, Any, Union, AsyncGenerator
+from typing import Optional, Dict, Any, Union, AsyncGenerator, Type
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
+from functools import partial
 
 from babelgraph.core.agent.base import BaseAgent
 from babelgraph.core.runtime import BaseRuntime
@@ -26,19 +27,15 @@ logger = get_logger(LogComponent.NODES)
 
 class AgentNode(Node):
     """
-    Node for executing LLM agent steps with structured outputs.
+    Node for executing LLM agent steps.
     
     Features:
         - Message passing to agent
         - Streaming support
-        - Required structured outputs
+        - Optional structured outputs
         - State management
         - Response timing and logging
         - Runtime injection for platform-specific behavior
-        
-    The node can operate in two modes:
-    1. Direct agent execution (when no runtime is provided)
-    2. Runtime-based execution (when a runtime is injected)
     """
     
     agent: BaseAgent = Field(
@@ -49,13 +46,17 @@ class AgentNode(Node):
         default=None,
         description="Optional runtime for platform-specific behavior"
     )
-    response_model: type[BaseModel] = Field(
-        ...,  # Required
-        description="Pydantic model for structured output validation"
-    )
     stream: bool = Field(
         default=False,
         description="Whether to stream the response"
+    )
+    response_model: Optional[Type[BaseModel]] = Field(
+        default=None,
+        description="Optional Pydantic model for response validation"
+    )
+    maintain_history: bool = Field(
+        default=True,
+        description="Whether to maintain conversation history across executions"
     )
 
     @model_validator(mode='after')
@@ -63,87 +64,90 @@ class AgentNode(Node):
         """Validate agent configuration."""
         if not self.agent:
             raise ValueError(f"AgentNode {self.id} requires an agent")
-        if not self.response_model:
-            raise ValueError(f"AgentNode {self.id} requires a response_model")
+        
+        # If response model is set, configure agent
+        if self.response_model:
+            self.agent.response_model = self.response_model
+            
         return self
 
-    async def process(self, state: NodeState) -> Optional[str]:
-        """Process the node based on its type."""
+    async def process(self, state: "NodeState") -> Optional[str]:
+        """Process the node using the agent."""
         try:
-            # Get runtime from metadata or use direct agent
-            runtime = self.metadata.get("runtime")
-            if not runtime:
-                # Use direct agent execution
-                message = state.data.get("message", "")
-                if not message:
-                    raise ValueError(f"No message found in state.data[message]")
-                
-                # Configure agent
-                self.agent.response_model = self.response_model
-                
-                # Process with agent
+            # Get message input
+            message = self.get_message_input(state)
+            if not message:
+                raise ValueError("No message input provided")
+
+            logger.debug(f"Processing message in {self.id}: {message['content']}")
+
+            try:
+                # Process with agent - pass only the content
                 if self.stream:
-                    chunks = []
-                    async for chunk, tool in self.agent._stream_step(message):
+                    # Stream response with callback
+                    response = ""
+                    async for chunk, tool in self.agent._stream_step(message['content']):
                         if tool:
-                            logger.info(f"[Calling Tool '{tool._name()}' with args {tool.args}]")
-                            if hasattr(tool, 'call'):
-                                result = await tool.call() if asyncio.iscoroutinefunction(tool.call) else tool.call()
-                                logger.info(f"Tool result: {result}")
-                        else:
-                            chunks.append(chunk)
-                            # Emit streaming event
+                            # Handle tool execution if needed
+                            logger.info(f"Tool execution: {tool._name()}")
+                            result = tool.call()
+                            logger.info(f"Tool result: {result}")
+                        elif chunk:
+                            # Stream the chunk if callback exists
                             if "on_stream" in self.metadata:
                                 await self.metadata["on_stream"](chunk, state, self.id)
-                    response = "".join(chunks)
+                            response += chunk
+                    
+                    # Store final response with logging suppressed (since we streamed it)
+                    self.set_result(state, "response", response, suppress_logging=True)
                 else:
-                    response = await self.agent._step(message)
+                    # Process normally and store result
+                    response = await self.agent._step(message['content'])
+                    
+                    # Log raw response for debugging
+                    logger.debug(f"Raw agent response: {response}")
+                    
+                    # Validate response if model specified
+                    if self.response_model:
+                        try:
+                            validated = self.response_model.model_validate(response)
+                            response = validated
+                        except Exception as validation_error:
+                            logger.error(f"Response validation error: {validation_error}")
+                            if hasattr(validation_error, 'errors'):
+                                for error in validation_error.errors():
+                                    logger.error(f"- {error}")
+                            raise
+                    
+                    # Store result
+                    self.set_result(state, "response", response)
                 
-                # Store result
-                state.results[self.id] = {"response": response}
-                return "default"
+                # Clear history if not maintaining
+                if not self.maintain_history:
+                    self.agent.clear_history()
+                
+                return "success"
+                
+            except Exception as agent_error:
+                # Log detailed error info
+                logger.error(f"Agent error in {self.id}:")
+                logger.error(f"Error type: {type(agent_error)}")
+                logger.error(f"Error message: {str(agent_error)}")
+                
+                # Handle RetryError specially
+                if hasattr(agent_error, 'last_attempt'):
+                    try:
+                        last_error = agent_error.last_attempt.exception()
+                        if last_error:
+                            logger.error(f"Original error type: {type(last_error)}")
+                            logger.error(f"Original error message: {str(last_error)}")
+                    except Exception as e:
+                        logger.error(f"Error extracting original error: {e}")
+                
+                raise
             
-            # Process based on node type using runtime
-            if "validate" in self.id:
-                # Get story content to validate
-                story_node_id = self.id.replace("validate_", "")
-                story_content = state.results[story_node_id]["response"]["content"]
-                agent_id = f"agent{self.metadata['agent_id']}"
-                previous_parts = runtime.stories[agent_id]
-                
-                # Validate using runtime
-                response = await runtime.validate_story_part(story_content, previous_parts)
-                
-                # Store result
-                state.results[self.id] = {"response": response}
-                
-                # Return next node based on validation
-                return "valid" if response.is_valid else "invalid"
-                
-            elif "reflection" in self.id:
-                # Use runtime for reflection
-                response = await runtime.synthesize_stories()
-                state.results[self.id] = {"response": response}
-                return "meets_criteria" if response.meets_criteria else "needs_improvement"
-                
-            elif "final_synthesis" in self.id:
-                # Final synthesis using runtime
-                response = await runtime.synthesize_stories()
-                state.results[self.id] = {"response": response}
-                return "default"
-                
-            else:
-                # Story generation node
-                part = self.metadata["part"]
-                themes = self.metadata["themes"]
-                agent_id = f"agent{self.metadata['agent_id']}"
-                
-                # Generate story part using runtime
-                response = await runtime.generate_story_part(agent_id, part, themes)
-                state.results[self.id] = {"response": response}
-                return "default"
-                
         except Exception as e:
+            logger.error(f"Error in agent node {self.id}: {str(e)}")
             state.add_error(self.id, str(e))
             return "error"
 
