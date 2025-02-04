@@ -1,9 +1,10 @@
 """
-Simple Parallel Haiku Generation Example
+Parallel Haiku Generation Example
 
-Demonstrates:
+This example demonstrates:
 1. Two agents generating haikus in parallel
-2. Simple synthesis using Pydantic models
+2. Simple synthesis combining their work
+3. Basic validation of haiku structure
 """
 
 import asyncio
@@ -12,9 +13,11 @@ from pydantic import BaseModel, Field
 
 from babelgraph.core.agent import BaseAgent
 from babelgraph.core.graph import Graph, NodeState
-from babelgraph.core.graph.nodes import AgentNode, Node, terminal_node, state_handler
-from babelgraph.core.logging import configure_logging, LogComponent, Colors, get_logger
+from babelgraph.core.graph.nodes import AgentNode, Node, terminal_node
+from babelgraph.core.graph.nodes.base.node import parallel_node, ParallelExecutionPattern
+from babelgraph.core.logging import LogComponent, get_logger
 
+# Get workflow logger
 logger = get_logger(LogComponent.WORKFLOW)
 
 ###################################################################
@@ -23,162 +26,87 @@ logger = get_logger(LogComponent.WORKFLOW)
 
 class Haiku(BaseModel):
     """A haiku with 5-7-5 syllable structure."""
-    lines: List[str] = Field(..., min_items=3, max_items=3, description="The three lines of the haiku (5-7-5 syllables)")
+    lines: List[str] = Field(..., min_items=3, max_items=3)
+    theme: str = Field(default="nature")
 
-class SyllableAnalysis(BaseModel):
-    """Analysis of syllables for each line."""
-    Line1: str = Field(..., description="Syllable breakdown of first line (5)")
-    Line2: str = Field(..., description="Syllable breakdown of second line (7)")
-    Line3: str = Field(..., description="Syllable breakdown of third line (5)")
-
-class HaikuResponse(BaseModel):
-    """Response from haiku generation."""
-    haiku: Haiku
-    theme: str
-    syllable_analysis: SyllableAnalysis = Field(..., description="Detailed syllable breakdown for each line")
-
-class SynthesisResponse(BaseModel):
-    """Response from haiku synthesis."""
+class HaikuAnalysis(BaseModel):
+    """Analysis of two haikus."""
     haikus: List[Haiku]
+    common_themes: List[str]
     analysis: str
-
-###################################################################
-# System Prompts
-###################################################################
-
-class HaikuMasterConfig(BaseModel):
-    """Configuration for the Haiku Master persona."""
-    instruction: str = Field(
-        default=(
-            "You are a haiku master specializing in the 5-7-5 syllable pattern. "
-            "Create haikus that strictly follow this structure, with careful syllable counting. "
-            "Respond with a valid JSON object matching the schema exactly."
-        ),
-        description="Core instruction for the haiku master"
-    )
-    response_format: dict = Field(
-        default={
-            "haiku": {
-                "lines": [
-                    "autumn leaves fall down",
-                    "dancing in the gentle breeze",
-                    "nature's lullaby"
-                ]
-            },
-            "theme": "seasonal change",
-            "syllable_analysis": {
-                "Line1": "(5): au-tumn (2) leaves (1) fall (1) down (1)",
-                "Line2": "(7): dan-cing (2) in (1) the (1) gen-tle (2) breeze (1)",
-                "Line3": "(5): na-ture's (2) lul-la-by (3)"
-            }
-        },
-        description="Example of the expected JSON response format"
-    )
-    guidelines: List[str] = Field(
-        default=[
-            "Ensure exact syllable counts (5-7-5)",
-            "Provide detailed syllable analysis for each line",
-            "Use clear, vivid imagery",
-            "Focus on the given theme",
-            "Return only valid JSON matching the schema"
-        ],
-        description="Guidelines for haiku creation"
-    )
-
-class HaikuSynthesizerConfig(BaseModel):
-    """Configuration for the Haiku Synthesizer persona."""
-    instruction: str = Field(
-        default=(
-            "You are a poetry analyst specializing in finding connections between haikus. "
-            "Analyze pairs of haikus and explain their thematic connections. "
-            "Respond with a valid JSON object matching the schema exactly."
-        ),
-        description="Core instruction for the synthesizer"
-    )
-    response_format: dict = Field(
-        default={
-            "haikus": [
-                {
-                    "lines": [
-                        "autumn leaves fall down",
-                        "dancing in the gentle breeze",
-                        "nature's lullaby"
-                    ]
-                },
-                {
-                    "lines": [
-                        "heart beats like thunder",
-                        "memories flood through my mind",
-                        "peace comes at sunset"
-                    ]
-                }
-            ],
-            "analysis": "Both haikus explore themes of natural cycles and inner peace..."
-        },
-        description="Example of the expected JSON response format"
-    )
-    guidelines: List[str] = Field(
-        default=[
-            "Compare themes and imagery",
-            "Identify emotional resonance",
-            "Note contrasting elements",
-            "Return only valid JSON matching the schema"
-        ],
-        description="Guidelines for analysis"
-    )
-
-# Initialize our configurations
-HAIKU_MASTER = HaikuMasterConfig()
-HAIKU_SYNTHESIZER = HaikuSynthesizerConfig()
 
 ###################################################################
 # Nodes
 ###################################################################
 
+@parallel_node(pattern=ParallelExecutionPattern.CONCURRENT)
 class HaikuGeneratorNode(AgentNode):
     """Generates a single haiku."""
     
-    @state_handler
     async def process(self, state: NodeState) -> str:
         """Generate haiku with LLM validation."""
         try:
             # Get or set default prompt
             if not self.get_message_input(state):
-                self.set_message_input(state, content="Create a haiku.", role="user")
+                self.set_message_input(
+                    state, 
+                    content=(
+                        "Create a haiku following the 5-7-5 syllable pattern. "
+                        "Return ONLY a JSON object with 'lines' (array of 3 strings) and 'theme' (string)."
+                    ),
+                    role="user"
+                )
             
-            # Generate and validate via LLM
+            # Generate haiku
+            logger.agent(f"Generating {self.id}...")
             response = await self.agent._step(self.get_message_input(state)['content'])
-            haiku = HaikuResponse.model_validate(response)
+            haiku = Haiku.model_validate(response)
             
-            # Log syllable analysis
-            logger.info(f"\nSyllable Analysis:\n{haiku.syllable_analysis}")
+            # Log the generated haiku
+            logger.agent(f"Generated {self.id}:\n" + 
+                        "\n".join(f"  {line}" for line in haiku.lines) +
+                        f"\nTheme: {haiku.theme}")
             
+            # Store result
             self.set_result(state, "haiku", haiku)
             return "success"
             
         except Exception as e:
-            logger.error(f"Error generating haiku: {str(e)}")
+            logger.error(f"Error generating haiku in {self.id}: {str(e)}")
             return "error"
 
+@parallel_node(pattern=ParallelExecutionPattern.JOIN)
 class SynthesisNode(AgentNode):
-    """Combines two haikus with analysis."""
+    """Combines and analyzes two haikus."""
     
-    @state_handler
     async def process(self, state: NodeState) -> str:
         """Synthesize haikus."""
         try:
-            # Get haikus
-            haiku1 = state.results["haiku1"]["haiku"].haiku
-            haiku2 = state.results["haiku2"]["haiku"].haiku
+            # Get both haikus from results
+            haiku1 = Haiku.model_validate(state.results["haiku1"]["haiku"])
+            haiku2 = Haiku.model_validate(state.results["haiku2"]["haiku"])
             
-            # Create synthesis prompt
-            prompt = f"Analyze these haikus:\n\n1:\n{chr(10).join(haiku1.lines)}\n\n2:\n{chr(10).join(haiku2.lines)}"
+            logger.agent("Analyzing haikus:\n" +
+                        f"Haiku 1 ({haiku1.theme}):\n" +
+                        "\n".join(f"  {line}" for line in haiku1.lines) +
+                        f"\n\nHaiku 2 ({haiku2.theme}):\n" +
+                        "\n".join(f"  {line}" for line in haiku2.lines))
+            
+            # Create analysis prompt
+            prompt = (
+                "Analyze these two haikus and return a JSON object with 'haikus' (array), "
+                "'common_themes' (array of strings), and 'analysis' (string):\n\n"
+                f"Haiku 1 ({haiku1.theme}):\n{chr(10).join(haiku1.lines)}\n\n"
+                f"Haiku 2 ({haiku2.theme}):\n{chr(10).join(haiku2.lines)}"
+            )
+            
             self.set_message_input(state, content=prompt, role="user")
             
-            # Generate synthesis
+            # Generate analysis
             response = await self.agent._step(self.get_message_input(state)['content'])
-            synthesis = SynthesisResponse.model_validate(response)
-            self.set_result(state, "synthesis", synthesis)
+            analysis = HaikuAnalysis.model_validate(response)
+            
+            self.set_result(state, "analysis", analysis)
             return "success"
             
         except Exception as e:
@@ -187,103 +115,81 @@ class SynthesisNode(AgentNode):
 
 @terminal_node
 class EndNode(Node):
-    """Display results."""
+    """Display final results."""
     
-    @state_handler
     async def process(self, state: NodeState) -> None:
-        """Show haikus and synthesis."""
+        """Show haikus and analysis."""
         try:
-            synthesis = state.results.get("synthesis", {}).get("synthesis")
-            if synthesis:
-                print(f"\n{Colors.BOLD}First Haiku:{Colors.RESET}")
-                for line in synthesis.haikus[0].lines:
-                    print(f"  {line}")
-                    
-                print(f"\n{Colors.BOLD}Second Haiku:{Colors.RESET}")
-                for line in synthesis.haikus[1].lines:
-                    print(f"  {line}")
-                    
-                print(f"\n{Colors.BOLD}Analysis:{Colors.RESET}")
-                print(synthesis.analysis)
+            analysis = state.results.get("synthesis", {}).get("analysis")
+            if analysis:
+                logger.agent(f"Final Analysis:\n{analysis.analysis}\n")
+                logger.agent(f"Common Themes: {', '.join(analysis.common_themes)}")
                 
         except Exception as e:
             logger.error(f"Error displaying results: {str(e)}")
 
 async def main():
     """Run parallel haiku generation."""
-    configure_logging()
-    
     try:
         # Setup graph
         graph = Graph()
         state = NodeState()
         
-        # Create nodes
-        graph.create_workflow(
-            nodes={
-                "haiku1": HaikuGeneratorNode(
-                    id="haiku1",
-                    agent=BaseAgent(
-                        system_prompt=HAIKU_MASTER,
-                        response_model=HaikuResponse
-                    )
-                ),
-                "haiku2": HaikuGeneratorNode(
-                    id="haiku2", 
-                    agent=BaseAgent(
-                        system_prompt=HAIKU_MASTER,
-                        response_model=HaikuResponse
-                    )
-                ),
-                "synthesis": SynthesisNode(
-                    id="synthesis",
-                    agent=BaseAgent(
-                        system_prompt=HAIKU_SYNTHESIZER,
-                        response_model=SynthesisResponse
-                    )
-                ),
-                "end": EndNode(id="end")
-            },
-            flows=[
-                ("haiku1", "success", "synthesis"),
-                ("haiku2", "success", "synthesis"),
-                ("synthesis", "success", "end"),
-                ("haiku1", "error", "end"),
-                ("haiku2", "error", "end"),
-                ("synthesis", "error", "end")
-            ]
+        # Create workflow nodes
+        haiku1 = HaikuGeneratorNode(
+            id="haiku1",
+            agent=BaseAgent(
+                system_prompt="You are a haiku master specializing in nature themes.",
+                response_model=Haiku
+            )
+        )
+        haiku2 = HaikuGeneratorNode(
+            id="haiku2", 
+            agent=BaseAgent(
+                system_prompt="You are a haiku master specializing in emotion themes.",
+                response_model=Haiku
+            )
+        )
+        synthesis = SynthesisNode(
+            id="synthesis",
+            agent=BaseAgent(
+                system_prompt="You are a poetry analyst who finds connections between haikus.",
+                response_model=HaikuAnalysis
+            )
+        )
+        end = EndNode(id="end")
+        
+        # Add nodes to graph
+        for node in [haiku1, haiku2, synthesis, end]:
+            graph.add_node(node)
+            
+        # Define parallel subgraph
+        graph.add_parallel_subgraph(
+            name="haiku_generation",
+            nodes=["haiku1", "haiku2"],
+            join_node="synthesis",
+            pattern=ParallelExecutionPattern.CONCURRENT
         )
         
+        # Add final edge
+        graph.add_edge("synthesis", "success", "end")
+        
         # Set prompts
-        graph.nodes["haiku1"].set_message_input(
+        haiku1.set_message_input(
             state,
-            content="Create a nature haiku.",
+            content="Create a haiku about nature.",
             role="user"
         )
-        graph.nodes["haiku2"].set_message_input(
+        haiku2.set_message_input(
             state,
             content="Create a haiku about emotions.",
             role="user"
         )
         
-        # Run workflow
-        print(f"\n{Colors.BOLD}🌸 Generating Haikus{Colors.RESET}")
-        print(f"{Colors.DIM}{'─' * 40}{Colors.RESET}\n")
+        logger.agent("🌸 Generating Haikus")
         
-        # Run haiku generation in parallel
-        results = await asyncio.gather(
-            graph.run("haiku1", state),
-            graph.run("haiku2", state),
-            return_exceptions=True
-        )
-        
-        # Check for errors
-        for result in results:
-            if isinstance(result, Exception):
-                raise result
-        
-        # Run synthesis
-        await graph.run("synthesis", state)
+        # Run the parallel subgraph
+        await graph.run_parallel("haiku_generation", state)
         
     except Exception as e:
         logger.error(f"Workflow failed: {str(e)}")

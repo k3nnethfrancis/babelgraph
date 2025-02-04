@@ -1,0 +1,148 @@
+# Tutoring Workflow Technical Specification
+
+## Overview
+A demonstration example showcasing how to build multi-agent educational workflows using the Babelgraph framework. This example implements a simple tutoring session between a student and professor, culminating in a quiz to test understanding.
+
+## Goals
+1. Demonstrate core Babelgraph features for multi-agent orchestration
+2. Show how to build interactive, turn-based agent workflows
+3. Provide a clear example of structured agent communication
+4. Showcase framework's state management and workflow control
+
+## Key Features to Demonstrate
+
+### 1. Multi-Agent Interaction
+- Student agent for asking questions and taking quiz
+- Professor agent for providing explanations
+- Turn-based interaction system
+- Structured communication between agents
+
+### 2. Structured Data Flow
+- Pydantic models for all agent inputs/outputs
+- Type-safe data passing between nodes
+- Clear response schemas for questions and answers
+- Structured quiz format and evaluation
+
+### 3. State Management
+- Track conversation turns
+- Manage quiz state
+- Handle agent memory/context
+- Control workflow transitions
+
+### 4. Workflow Control
+- Graph-based node system
+- Clear state transitions
+- Terminal conditions (quiz completion)
+- Error handling and recovery
+
+### 5. Framework Features
+- Async execution
+- Streaming responses
+- Rich logging
+- Event handling
+- Error management
+
+## Component Breakdown
+
+### 1. Response Models
+- StudentQuestion: Format student queries
+- ProfessorResponse: Structure teaching responses
+- QuizResponse: Format quiz answers and evaluation
+
+### 2. Workflow Nodes
+- StudentNode: Handle student interactions
+- ProfessorNode: Process and respond to questions
+- QuizNode: Manage quiz delivery and evaluation
+
+### 3. State Tracking
+- Turn counter
+- Conversation history
+- Quiz status
+- Learning progress
+
+### 4. Runtime Configuration
+- Streaming setup
+- Logging configuration
+- Error handling
+- Event management
+
+## Interaction Flow
+
+1. Student asks question about topic
+2. Professor provides explanation
+3. Repeat for N turns
+4. Transition to quiz mode
+5. Evaluate understanding
+6. Provide final assessment
+
+## Success Metrics
+
+### Functional
+- Complete interaction cycle
+- Successful quiz completion
+- Proper state transitions
+- Error recovery
+
+### Technical
+- Clean async execution
+- Proper streaming
+- Structured data flow
+- State consistency
+
+## Implementation Guidelines
+
+### Code Organization
+- Separate response models
+- Clean node implementations
+- Clear state management
+- Proper error handling
+
+### Best Practices
+- Follow PEP 8
+- Use type hints
+- Document all components
+- Handle edge cases
+- Implement proper logging
+
+### Framework Usage
+- Leverage Babelgraph primitives
+- Use built-in state management
+- Implement proper node patterns
+- Follow framework conventions
+
+## Example Usage
+
+The example should demonstrate:
+1. Creating and configuring agents
+2. Setting up the workflow graph
+3. Managing turn-based interaction
+4. Handling the quiz phase
+5. Processing results
+
+## Documentation Requirements
+
+1. Clear setup instructions
+2. Usage examples
+3. Expected outputs
+4. Error scenarios
+5. Extension points
+
+## Future Extensions
+
+Possible enhancements:
+1. Multiple subjects/topics
+2. Dynamic quiz generation
+3. Progress tracking
+4. Performance analytics
+5. Enhanced agent memory
+
+## Success Criteria
+
+The example successfully demonstrates:
+1. Multi-agent orchestration
+2. Structured data flow
+3. State management
+4. Workflow control
+5. Framework features
+
+This example should serve as a clear demonstration of how to build interactive, multi-agent systems using the Babelgraph framework while maintaining simplicity and clarity. 

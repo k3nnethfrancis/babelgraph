@@ -41,7 +41,9 @@ class PrettyFormatter(logging.Formatter):
         'INFO': (Colors.INFO, 'ℹ️'),
         'WARNING': (Colors.WARNING, '⚠️'),
         'ERROR': (Colors.ERROR, '❌'),
-        'CRITICAL': (Colors.ERROR + Colors.BOLD, '🚨')
+        'CRITICAL': (Colors.ERROR + Colors.BOLD, '🚨'),
+        'AGENT': (Colors.SUCCESS, '🤖'),  # New level for agent outputs
+        'TOOL': (Colors.HEADER, '🔧')     # New level for tool calls
     }
 
     def format(self, record):
@@ -102,6 +104,8 @@ class LogLevel(IntEnum):
     WARNING = logging.WARNING
     ERROR = logging.ERROR
     CRITICAL = logging.CRITICAL
+    AGENT = 25  # Custom level for agent outputs
+    TOOL = 26   # Custom level for tool calls
 
 class VerbosityLevel(IntEnum):
     """Custom verbosity levels for more granular control."""
@@ -112,13 +116,16 @@ class VerbosityLevel(IntEnum):
     ERROR = logging.ERROR
     CRITICAL = logging.CRITICAL
 
+# Register custom log levels
+logging.addLevelName(LogLevel.AGENT, "AGENT")
+logging.addLevelName(LogLevel.TOOL, "TOOL")
 logging.addLevelName(VerbosityLevel.VERBOSE, "VERBOSE")
 
 class BabelLoggingConfig(BaseModel):
     """Configuration for logging behavior."""
     level: VerbosityLevel = Field(default=VerbosityLevel.INFO)
-    show_llm_messages: bool = Field(default=False)
-    show_tool_calls: bool = Field(default=False)
+    show_llm_messages: bool = Field(default=True)  # Changed to True by default
+    show_tool_calls: bool = Field(default=True)    # Changed to True by default
     show_node_transitions: bool = Field(default=False)
 
 def configure_logging(
@@ -156,39 +163,35 @@ def configure_logging(
     for handler in handlers:
         root_logger.addHandler(handler)
     
-    # Configure component levels
-    if component_levels:
-        for component, level in component_levels.items():
-            logger = logging.getLogger(component.value)
-            logger.setLevel(level.value)
-
-class JsonLogHandler(logging.Handler):
-    """Handler that formats log records as JSON."""
+    # Set default component levels if none provided
+    if not component_levels:
+        component_levels = {
+            LogComponent.AGENT: LogLevel.AGENT,   # Always show agent outputs
+            LogComponent.TOOLS: LogLevel.TOOL,    # Always show tool calls
+            LogComponent.GRAPH: LogLevel.INFO,
+            LogComponent.NODES: LogLevel.INFO
+        }
     
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            msg = self.format(record)
-            log_entry = {
-                "timestamp": datetime.fromtimestamp(record.created).isoformat(),
-                "level": record.levelname,
-                "logger": record.name,
-                "message": msg,
-                "function": record.funcName,
-                "line": record.lineno,
-                "path": record.pathname
-            }
-            
-            if hasattr(record, "extra"):
-                log_entry.update(record.extra)
-            
-            print(json.dumps(log_entry))
-            
-        except Exception as e:
-            print(f"Error in JSON logging: {e}")
+    # Configure component levels
+    for component, level in component_levels.items():
+        logger = logging.getLogger(component.value)
+        logger.setLevel(level.value)
 
 def get_logger(component: LogComponent) -> logging.Logger:
     """Get a logger for a specific component."""
-    return logging.getLogger(component.value)
+    logger = logging.getLogger(component.value)
+    
+    # Add convenience methods for agent and tool logging
+    def log_agent(self, msg: str) -> None:
+        self.log(LogLevel.AGENT, f"\n{Colors.SUCCESS}{msg}{Colors.RESET}")
+    
+    def log_tool(self, msg: str) -> None:
+        self.log(LogLevel.TOOL, f"\n{Colors.HEADER}{msg}{Colors.RESET}")
+    
+    logger.agent = lambda msg: log_agent(logger, msg)
+    logger.tool = lambda msg: log_tool(logger, msg)
+    
+    return logger
 
 def log_verbose(logger: logging.Logger, message: str) -> None:
     """Log a message at VERBOSE level."""
@@ -207,17 +210,5 @@ def log_state(logger: logging.Logger, state: Dict[str, Any], prefix: str = "") -
     except Exception as e:
         logger.error(f"Error logging state: {e}")
 
-# Utility functions
-def set_component_level(component: LogComponent, level: LogLevel) -> None:
-    """Set logging level for a specific component."""
-    logging.getLogger(component.value).setLevel(level.value)
-
-def disable_all_logging() -> None:
-    """Disable logging for all components."""
-    for component in LogComponent:
-        logging.getLogger(component.value).setLevel(logging.CRITICAL)
-
-def enable_debug_mode() -> None:
-    """Enable debug logging for all components."""
-    for component in LogComponent:
-        logging.getLogger(component.value).setLevel(logging.DEBUG) 
+# Default configuration
+configure_logging() 

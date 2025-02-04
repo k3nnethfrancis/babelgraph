@@ -12,16 +12,18 @@ Supports:
 
 import logging
 import asyncio
-from typing import Optional, Dict, Any, Union, AsyncGenerator
+from typing import Optional, Dict, Any, Union, AsyncGenerator, List
 from datetime import datetime
 from pydantic import BaseModel, Field, model_validator
 from functools import partial
+import json
 
 from babelgraph.core.agent.base import BaseAgent
 from babelgraph.core.runtime import BaseRuntime
 from babelgraph.core.logging import get_logger, LogComponent, Colors
 from babelgraph.core.graph.nodes.base.node import Node
 from babelgraph.core.graph.state import NodeState, NodeStatus
+from mirascope.core import BaseMessageParam
 
 logger = get_logger(LogComponent.NODES)
 
@@ -58,6 +60,16 @@ class AgentNode(Node):
             raise ValueError(f"AgentNode {self.id} requires an agent")
         return self
 
+    def _serialize_history(self, history: List[BaseMessageParam]) -> List[dict]:
+        """Serialize BaseMessageParam history to JSON-compatible dict."""
+        return [
+            {
+                "role": msg.role,
+                "content": msg.content
+            } if isinstance(msg, BaseMessageParam) else msg
+            for msg in history
+        ]
+
     async def process(self, state: "NodeState") -> Optional[str]:
         """Process the node using the agent."""
         try:
@@ -66,11 +78,24 @@ class AgentNode(Node):
             if not message:
                 raise ValueError("No message input provided")
 
-            # Process with agent - pass only the content
+            # Create proper BaseMessageParam
+            message_param = BaseMessageParam(
+                role=message.get('role', 'user'),
+                content=message['content']
+            )
+
+            # Log with proper serialization
+            logger.debug(
+                f"Agent {self.id} processing message:\n"
+                f"Role: {message_param.role}\n"
+                f"Content: {message_param.content}\n"
+                f"Current History: {json.dumps(self._serialize_history(self.agent.history), indent=2)}"
+            )
+
+            # Process with agent - pass BaseMessageParam
             if self.stream:
-                # Stream response with callback
                 response = await self.agent._stream(
-                    message['content'],  # Pass only content
+                    message_param,  # Pass full message param
                     callback=partial(
                         self._handle_stream_callback,
                         state=state,
@@ -78,8 +103,13 @@ class AgentNode(Node):
                     )
                 )
             else:
-                # Process normally and store result
-                response = await self.agent._step(message['content'])  # Pass only content
+                response = await self.agent._step(message_param)  # Pass full message param
+            
+            # Log updated history with proper serialization
+            logger.debug(
+                f"Agent {self.id} updated history after response:\n"
+                f"{json.dumps(self._serialize_history(self.agent.history), indent=2)}"
+            )
             
             # Store result and return success
             self.set_result(state, "response", response)

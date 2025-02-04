@@ -44,11 +44,19 @@ from babelgraph.core.logging import (
     configure_logging,
     LogLevel
 )
-from babelgraph.core.graph.state import NodeState, NodeStatus
-from babelgraph.core.graph.nodes.base.node import Node
+from babelgraph.core.graph.state import NodeState, NodeStatus, ParallelTaskStatus
+from babelgraph.core.graph.nodes.base.node import Node, ParallelExecutionPattern
 
 # Get logger for graph component
 logger = logging.getLogger(LogComponent.GRAPH.value)
+
+class ParallelSubgraph(BaseModel):
+    """Configuration for a parallel subgraph."""
+    nodes: List[str]
+    join_node: str
+    pattern: ParallelExecutionPattern
+    max_concurrent: Optional[int] = None
+    timeout: Optional[float] = None
 
 class Graph(BaseModel):
     """A directed graph for orchestrating agent workflows.
@@ -62,10 +70,12 @@ class Graph(BaseModel):
     Attributes:
         nodes: Dictionary mapping node IDs to Node instances
         entry_points: Dictionary mapping entry point names to starting node IDs
+        parallel_subgraphs: Dictionary mapping subgraph names to ParallelSubgraph instances
         logging_config: Controls logging verbosity
     """
     nodes: Dict[str, Node] = Field(default_factory=dict)
     entry_points: Dict[str, str] = Field(default_factory=dict) 
+    parallel_subgraphs: Dict[str, ParallelSubgraph] = Field(default_factory=dict)
     logging_config: BabelLoggingConfig = Field(
         default_factory=BabelLoggingConfig
     )
@@ -237,7 +247,88 @@ class Graph(BaseModel):
             
         self._logger.info(f"Composed graph under namespace: {namespace}")
 
-    async def run(self, entry_point: Optional[str] = None, state: Optional[NodeState] = None) -> NodeState:
+    def add_parallel_subgraph(
+        self,
+        name: str,
+        nodes: List[str],
+        join_node: str,
+        pattern: ParallelExecutionPattern = ParallelExecutionPattern.CONCURRENT,
+        max_concurrent: Optional[int] = None,
+        timeout: Optional[float] = None
+    ) -> None:
+        """Define a parallel subgraph."""
+        # Validate nodes exist
+        for node_id in nodes + [join_node]:
+            if node_id not in self.nodes:
+                raise ValueError(f"Node {node_id} not found in graph")
+                
+        self.parallel_subgraphs[name] = ParallelSubgraph(
+            nodes=nodes,
+            join_node=join_node,
+            pattern=pattern,
+            max_concurrent=max_concurrent,
+            timeout=timeout
+        )
+        
+        # Update node dependencies
+        join_node_obj = self.nodes[join_node]
+        join_node_obj.parallel_config.dependencies.update(nodes)
+        
+        self._logger.info(
+            f"Added parallel subgraph '{name}' with {len(nodes)} nodes "
+            f"and join node '{join_node}'"
+        )
+
+    async def run_parallel(
+        self,
+        subgraph_name: str,
+        state: Optional[NodeState] = None
+    ) -> NodeState:
+        """Run a parallel subgraph."""
+        if subgraph_name not in self.parallel_subgraphs:
+            raise ValueError(f"Parallel subgraph '{subgraph_name}' not found")
+            
+        subgraph = self.parallel_subgraphs[subgraph_name]
+        state = state or NodeState()
+        
+        # Initialize parallel tasks
+        for node_id in subgraph.nodes:
+            state.add_parallel_task(node_id)
+            
+        # Run based on pattern
+        if subgraph.pattern == ParallelExecutionPattern.CONCURRENT:
+            # Run all nodes concurrently
+            tasks = [
+                self.run(node_id, state)
+                for node_id in subgraph.nodes
+            ]
+            await asyncio.gather(*tasks)
+            
+        elif subgraph.pattern == ParallelExecutionPattern.PIPELINE:
+            # Run in stages based on dependencies
+            while True:
+                ready = state.get_ready_tasks()
+                if not ready:
+                    break
+                    
+                # Limit concurrent tasks
+                if subgraph.max_concurrent:
+                    ready = set(list(ready)[:subgraph.max_concurrent])
+                    
+                # Run ready tasks
+                tasks = [self.run(node_id, state) for node_id in ready]
+                await asyncio.gather(*tasks)
+                
+        # Run join node
+        await self.run(subgraph.join_node, state)
+        
+        return state
+
+    async def run(
+        self,
+        entry_point: Optional[str] = None,
+        state: Optional[NodeState] = None
+    ) -> NodeState:
         """Run the graph from the entry point.
         
         Args:
@@ -247,34 +338,56 @@ class Graph(BaseModel):
         Returns:
             The final state after graph execution
         """
-        # Use provided entry point or graph's default
-        current_node_id = entry_point or self.entry_points["default"]
+        current_node_id = entry_point or self.entry_points.get("default")
         if not current_node_id:
             raise ValueError("No entry point specified")
         if current_node_id not in self.nodes:
             raise ValueError(f"Entry point not found: {current_node_id}")
             
-        # Initialize or use provided state
         state = state or NodeState()
         state.start_time = datetime.now()
         
         try:
             while current_node_id:
                 current_node = self.nodes[current_node_id]
-                logger.debug(f"Processing node: {current_node_id}")
+                self._logger.debug(f"Processing node: {current_node_id}")
                 
-                # Process node
-                next_condition = await current_node.process(state)
-                logger.debug(f"Node {current_node_id} returned condition: {next_condition}")
+                # Check if node is ready for parallel execution
+                if not current_node.is_ready(state):
+                    self._logger.debug(f"Node {current_node_id} not ready, waiting...")
+                    return state
                 
-                # Get next node based on condition
-                current_node_id = current_node.get_next_node(next_condition)
-                logger.debug(f"Next node: {current_node_id}")
+                # Track parallel execution
+                if current_node.parallel_config.pattern != ParallelExecutionPattern.NONE:
+                    state.start_parallel_task(current_node_id)
                 
+                try:
+                    # Process node
+                    next_condition = await current_node.process(state)
+                    self._logger.debug(f"Node {current_node_id} returned condition: {next_condition}")
+                    
+                    # Update parallel task status
+                    if current_node.parallel_config.pattern != ParallelExecutionPattern.NONE:
+                        if next_condition == "error":
+                            state.fail_parallel_task(current_node_id, state.errors.get(current_node_id, "Unknown error"))
+                        else:
+                            state.complete_parallel_task(current_node_id, state.results.get(current_node_id))
+                    
+                    # Get next node
+                    current_node_id = current_node.get_next_node(next_condition)
+                    self._logger.debug(f"Next node: {current_node_id}")
+                    
+                except Exception as e:
+                    self._logger.error(f"Error in node {current_node_id}: {e}")
+                    if current_node.parallel_config.pattern != ParallelExecutionPattern.NONE:
+                        state.fail_parallel_task(current_node_id, str(e))
+                    state.errors[current_node_id] = str(e)
+                    current_node_id = current_node.get_next_node("error")
+            
             return state
             
         except Exception as e:
-            logger.error(f"Error in graph execution: {e}")
+            self._logger.error(f"Error in graph execution: {e}")
             state.errors["graph"] = str(e)
             raise
 

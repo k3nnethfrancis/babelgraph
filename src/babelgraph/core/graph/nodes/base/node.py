@@ -12,19 +12,56 @@ Typical Usage:
 """
 
 import abc
-from typing import Tuple, Dict, Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING, Callable
+from typing import Tuple, Dict, Any, Optional, Protocol, runtime_checkable, TYPE_CHECKING, Callable, Set
 from functools import wraps
+from enum import Enum
 from pydantic import BaseModel, Field, model_validator
 from babelgraph.core.logging import get_logger, LogComponent
-from babelgraph.core.graph.state import NodeStateProtocol
+from babelgraph.core.graph.state import NodeStateProtocol, NodeStatus, ParallelTaskStatus
 import json
 from babelgraph.core.logging import Colors
+from mirascope.core import BaseMessageParam
 
 if TYPE_CHECKING:
     from babelgraph.core.graph.state import NodeState
 
 # Get logger for node operations
 logger = get_logger(LogComponent.NODES)
+
+class ParallelExecutionPattern(str, Enum):
+    """Parallel execution patterns."""
+    NONE = "none"           # Not parallel
+    CONCURRENT = "concurrent"  # Run all in parallel
+    PIPELINE = "pipeline"      # Parallel pipeline stages
+    MAP = "map"               # Map over inputs
+    JOIN = "join"             # Join parallel flows
+
+class ParallelConfig(BaseModel):
+    """Configuration for parallel execution."""
+    pattern: ParallelExecutionPattern = Field(default=ParallelExecutionPattern.NONE)
+    dependencies: Set[str] = Field(default_factory=set)
+    max_concurrent: Optional[int] = None
+    timeout: Optional[float] = None
+    retry_count: Optional[int] = None
+
+def parallel_node(
+    pattern: ParallelExecutionPattern,
+    dependencies: Optional[Set[str]] = None,
+    max_concurrent: Optional[int] = None,
+    timeout: Optional[float] = None,
+    retry_count: Optional[int] = None
+):
+    """Decorator to configure parallel execution."""
+    def decorator(cls):
+        cls.parallel_config = ParallelConfig(
+            pattern=pattern,
+            dependencies=dependencies or set(),
+            max_concurrent=max_concurrent,
+            timeout=timeout,
+            retry_count=retry_count
+        )
+        return cls
+    return decorator
 
 def terminal_node(cls):
     """Decorator to mark a node as terminal.
@@ -102,7 +139,7 @@ class Node(BaseModel):
         id: Unique node identifier
         next_nodes: Mapping of conditions to next node IDs
         metadata: Optional node metadata
-        parallel: Whether node can run in parallel
+        parallel_config: Configuration for parallel execution
         input_map: Mapping of parameter names to state references
         is_terminal: Whether the node is terminal
     """
@@ -111,7 +148,9 @@ class Node(BaseModel):
         default_factory=lambda: {"default": None, "error": None}
     )
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    parallel: bool = Field(default=False)
+    parallel_config: ParallelConfig = Field(
+        default_factory=lambda: ParallelConfig()
+    )
     input_map: Dict[str, str] = Field(default_factory=dict)
     is_terminal: bool = Field(default=False)
 
@@ -142,6 +181,26 @@ class Node(BaseModel):
         Returns:
             True if the node is considered valid.
         """
+        return True
+
+    def is_ready(self, state: "NodeState") -> bool:
+        """Check if node is ready to execute based on parallel config."""
+        if self.parallel_config.pattern == ParallelExecutionPattern.NONE:
+            return True
+            
+        # Check dependencies
+        for dep in self.parallel_config.dependencies:
+            if dep not in state.parallel_tasks:
+                return False
+            task = state.parallel_tasks[dep]
+            if task.status != ParallelTaskStatus.COMPLETED:
+                return False
+                
+        # Check concurrent limit
+        if (self.parallel_config.max_concurrent and 
+            len(state.get_running_tasks()) >= self.parallel_config.max_concurrent):
+            return False
+            
         return True
 
     @staticmethod
@@ -360,19 +419,25 @@ class Node(BaseModel):
         """
         return state.data.get(f"{self.id}_{key}", default)
 
-    def set_message_input(self, state: "NodeState", content: str, role: str = "user") -> None:
+    def set_message_input(
+        self, 
+        state: "NodeState", 
+        content: str, 
+        role: str = "user"
+    ) -> None:
         """
-        Set a message input in state with role.
+        Set a message input in state using Mirascope's BaseMessageParam structure.
         
         Args:
             state: The node state to update
             content: The message content
             role: Message role (user/assistant/system)
         """
-        message = {
-            "role": role,
-            "content": content
-        }
+        message = BaseMessageParam(
+            role=role,
+            content=content
+        ).model_dump()
+        
         self.set_input(state, message, key="message")
         
     def get_message_input(self, state: "NodeState", default: Optional[Dict] = None) -> Optional[Dict]:

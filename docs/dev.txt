@@ -9,6 +9,7 @@ A lightweight graph orchestration library for multi-agent systems, focused on co
 3. **State**: Clean data passing between nodes
 4. **Agents**: LLM-powered nodes using Mirascope
 5. **Tools**: Reusable capabilities for agents
+6. **Parallel Execution**: Rich patterns for concurrent workflows
 
 ---
 
@@ -25,13 +26,13 @@ src/
 │   │   │   ├── nodes/
 │   │   │   │   ├── base/
 │   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── node.py  # Base node abstraction
+│   │   │   │   │   └── node.py  # Base node with parallel patterns
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── actions.py   # Action nodes
 │   │   │   │   └── agent.py     # Agent nodes
 │   │   │   ├── __init__.py
-│   │   │   ├── base.py          # Graph framework
-│   │   │   ├── state.py         # State management
+│   │   │   ├── base.py          # Graph framework with parallel support
+│   │   │   ├── state.py         # State and parallel task management
 │   │   │   └── viz.py           # Visualization
 │   │   ├── tools/
 │   │   │   ├── __init__.py
@@ -73,23 +74,40 @@ src/
 The heart of babelgraph, providing workflow orchestration.
 
 **Key Components:**
-- `base.py`: Graph framework and orchestration
-- `state.py`: State management and data flow
+- `base.py`: Graph framework and parallel orchestration
+- `state.py`: State and parallel task management
 - `nodes/`: Node implementations
-  * `base/node.py`: Base node abstraction
+  * `base/node.py`: Base node with parallel patterns
   * `actions.py`: Action nodes for custom logic
   * `agent.py`: LLM-powered agent nodes
 
 **Features:**
 - Async execution
+- Rich parallel execution patterns
 - State management
 - Event emission
-- Parallel processing
 - Visualization
 - Error handling
 - Subgraph composition
 
-### 2. Agent System (core/agent/)
+### 2. Parallel Execution System
+
+Built-in support for parallel workflows.
+
+**Patterns:**
+- CONCURRENT: Run all nodes in parallel
+- PIPELINE: Parallel pipeline stages
+- MAP: Map over inputs
+- JOIN: Join parallel flows
+
+**Features:**
+- Task dependency tracking
+- Concurrent limits
+- Timeouts and retries
+- State validation
+- Progress monitoring
+
+### 3. Agent System (core/agent/)
 
 LLM integration using Mirascope for structured interactions.
 
@@ -102,7 +120,7 @@ LLM integration using Mirascope for structured interactions.
 - Response validation
 - OpenPipe integration for custom models
 
-### 3. Logging System (core/logging.py)
+### 4. Logging System (core/logging.py)
 
 Centralized, component-based logging with pretty formatting.
 
@@ -114,7 +132,7 @@ Centralized, component-based logging with pretty formatting.
 - Pydantic integration
 - Configurable verbosity levels
 
-### 4. Runtime System (core/runtime.py)
+### 5. Runtime System (core/runtime.py)
 
 Environment management for different execution contexts.
 
@@ -132,74 +150,57 @@ Environment management for different execution contexts.
 1. **Separation of Concerns**
    - Agents handle LLM interactions and structured outputs
    - Graphs manage workflow orchestration and state
+   - Parallel execution built into framework
    - Runtimes provide platform integration when needed
    - Logging is centralized and component-based
 
-2. **Simplified Processing**
-   - AgentNodes call agent._step() directly
-   - No need for workflow-specific runtimes
-   - Graph handles state management and transitions
-   - Parallel execution through graph orchestration
-   - Terminal nodes are just regular nodes
+2. **Parallel Processing**
+   - Rich patterns built into framework
+   - Clean dependency management
+   - State-based coordination
+   - Progress tracking
+   - Configurable execution
 
 3. **State Management**
    - NodeState for passing data between nodes
-   - Graph manages parallel execution state
+   - ParallelTask for tracking parallel execution
+   - Graph manages execution state
    - Clean state sharing in subgraphs
-   - No need for complex runtime state
+   - Rich task lifecycle tracking
 
 ---
 
 ## Common Patterns
 
-### 1. Terminal Nodes
+### 1. Parallel Execution
 ```python
-# Simple terminal node
-end = Node(
-    id="end",
-    next_nodes={},  # Empty dict means terminal
-    metadata={}     # Optional metadata for node behavior
+# Define parallel nodes
+@parallel_node(pattern=ParallelExecutionPattern.CONCURRENT)
+class WorkerNode(Node):
+    async def process(self, state): ...
+
+# Configure parallel subgraph
+graph.add_parallel_subgraph(
+    name="parallel_work",
+    nodes=["worker1", "worker2"],
+    join_node="aggregator",
+    pattern=ParallelExecutionPattern.CONCURRENT
 )
+
+# Run parallel subgraph
+await graph.run_parallel("parallel_work", state)
 ```
 
 ### 2. Agent Nodes
-Agent nodes require:
-- response_model: Pydantic model for structured output
-- agent: BaseAgent instance with matching response_model
-- next_nodes: Mapping of conditions to next node IDs
-
-Example:
 ```python
 class AnalyzerNode(AgentNode):
     """Agent node for structured analysis."""
-    _logger: logging.Logger = PrivateAttr(default_factory=lambda: get_logger(LogComponent.NODES))
-    
-    def __init__(self, **data):
-        super().__init__(
-            response_model=AnalysisResponse,  # Required
-            **data
-        )
-    
     async def process(self, state: NodeState) -> Optional[str]:
-        try:
-            # Get input from state
-            message = self.format_prompt(state)
-            
-            # Process with agent
-            response = await self.agent._step(message)
-            
-            # Validate response type
-            if isinstance(response, self.response_model):
-                state.results[self.id] = {"response": response}
-                return "success"
-            
-            self._logger.error(f"Invalid response type: {type(response)}")
-            return "error"
-            
-        except Exception as e:
-            self._logger.error(f"Process error: {e}")
-            state.errors[self.id] = str(e)
-            return "error"
+        response = await self.agent._step(message)
+        if isinstance(response, self.response_model):
+            state.results[self.id] = {"response": response}
+            return "success"
+        return "error"
 ```
 
 ### 3. Graph Configuration
@@ -211,48 +212,15 @@ configure_logging(
         LogComponent.GRAPH: LogLevel.INFO,
         LogComponent.NODES: LogLevel.DEBUG,
         LogComponent.AGENT: LogLevel.DEBUG
-    },
-    pretty=True  # Enable pretty formatting
+    }
 )
 
 # Create workflow with config
-graph = Graph(
-    config=GraphConfig(
-        max_parallel=4,    # Maximum parallel nodes
-        timeout=60,        # Node timeout in seconds
-        retry_count=3      # Number of retries on failure
-    )
-)
-
-# Add nodes
-graph.add_node(start_node)
-graph.add_node(process_node)
-graph.add_node(Node(id="end", next_nodes={}))
-
-# Set entry point
-graph.set_entry_point("start")
-
-# Initialize state
-state = NodeState()
-state.data["input"] = "Initial data"
-
-# Run graph
-final_state = await graph.run("start", state)
+graph = Graph()
+graph.add_parallel_subgraph(...)
+graph.add_edge(...)
+await graph.run_parallel(...)
 ```
-
-The key improvements are:
-
-1. Added proper initialization of AgentNode with response_model
-2. Added state management in the process method
-3. Improved error handling and logging
-4. Added more comprehensive graph configuration options
-5. Added state initialization example
-6. Added proper type hints and docstrings
-7. Added metadata field to terminal nodes
-
-Would you like me to expand on any of these patterns or add additional examples?
-
----
 
 ## Example Implementations
 
@@ -275,8 +243,6 @@ Would you like me to expand on any of these patterns or add additional examples?
    - Discord chatbots
    - Local message processing
    - Platform-specific tools
-
----
 
 ## Development Guidelines
 
@@ -301,8 +267,6 @@ Would you like me to expand on any of these patterns or add additional examples?
 - Verify logging
 - Check state transitions
 
----
-
 ## Future Development
 
 ### High Priority
@@ -316,8 +280,6 @@ Would you like me to expand on any of these patterns or add additional examples?
 2. Documentation expansion
 3. Testing coverage
 4. Error handling enhancements
-
----
 
 ## Contributing
 

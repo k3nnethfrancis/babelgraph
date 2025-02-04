@@ -137,7 +137,10 @@ class BaseAgent(BaseModel):
         output_parser: Optional custom parser for response processing
         stream: Whether to use streaming mode for responses
     """
-    
+    model: str = Field(
+        default="gpt-4o-mini",
+        description="The llm model to use for the agent"
+    )
     history: List[BaseMessageParam] = Field(
         default_factory=list,
         description="Conversation history"
@@ -365,7 +368,7 @@ class BaseAgent(BaseModel):
                 result = await self._step(query)
                 print(result)
 
-    @openai.call("gpt-4o-mini", client=OpenPipeClient(), stream=True)
+    @openai.call(self.model, client=OpenPipeClient(), stream=True)
     def _stream(self, query: str) -> BaseDynamicConfig:
         """Make a streaming OpenPipe API call with the current conversation state.
         
